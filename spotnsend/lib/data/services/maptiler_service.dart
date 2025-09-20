@@ -1,11 +1,9 @@
 ﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
-const _fallbackMapTilerKey = 'baucnweLIulZSBRwopDh';
+import 'package:spotnsend/core/config/app_config.dart';
 
 final mapTilerKeyProvider = Provider<String>((ref) {
-  const envKey = String.fromEnvironment('MAPTILER_KEY', defaultValue: '');
-  return envKey.isNotEmpty ? envKey : _fallbackMapTilerKey;
+  return AppConfig.mapTilerKey;
 });
 
 final mapTilerServiceProvider = Provider<MapTilerService>((ref) {
@@ -18,6 +16,5 @@ class MapTilerService {
 
   final String key;
 
-  String get styleUrl => 'https://api.maptiler.com/maps/streets-v2/style.json?key=' + key;
+  String get styleUrl => 'https://api.maptiler.com/maps/streets-v2/style.json?key=$key';
 }
-
