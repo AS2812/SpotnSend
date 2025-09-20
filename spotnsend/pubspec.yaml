@@ -21,6 +21,11 @@ dependencies:
   maplibre_gl: ^0.22.0
   intl: ^0.20.2
   collection: ^1.18.0
+<<<<<<< HEAD
+=======
+  flutter_secure_storage: ^9.2.2
+  flutter_dotenv: ^5.1.0
+>>>>>>> 3f1d5939b69ebb53fd7acf28c8557f4585162768
 
 dev_dependencies:
   flutter_test:
@@ -33,3 +38,7 @@ flutter:
     - assets/images/
     - assets/icons/
     - fixtures/
+<<<<<<< HEAD
+=======
+    - .env
+>>>>>>> 3f1d5939b69ebb53fd7acf28c8557f4585162768
