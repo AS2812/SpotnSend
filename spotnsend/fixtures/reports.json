@@ -1,0 +1,108 @@
+﻿[
+  {
+    "id": "rpt-001",
+    "category": "Emergency",
+    "subcategory": "Fire",
+    "description": "Residential building fire on King Abdullah Road.",
+    "mediaUrls": [
+      "https://example.com/media/fire1.jpg"
+    ],
+    "lat": 24.7136,
+    "lng": 46.6753,
+    "createdAt": "2025-09-19T20:15:00Z"
+  },
+  {
+    "id": "rpt-002",
+    "category": "Infrastructure",
+    "subcategory": "Pothole",
+    "description": "Large pothole causing traffic slowdown.",
+    "mediaUrls": [],
+    "lat": 24.7201,
+    "lng": 46.6804,
+    "createdAt": "2025-09-19T19:00:00Z"
+  },
+  {
+    "id": "rpt-003",
+    "category": "Health",
+    "subcategory": "Accident",
+    "description": "Multi-vehicle collision near Exit 8.",
+    "mediaUrls": [
+      "https://example.com/media/accident1.jpg"
+    ],
+    "lat": 24.7288,
+    "lng": 46.7002,
+    "createdAt": "2025-09-19T18:45:00Z"
+  },
+  {
+    "id": "rpt-004",
+    "category": "Utilities",
+    "subcategory": "Power outage",
+    "description": "Neighborhood blackout lasting over 30 minutes.",
+    "mediaUrls": [],
+    "lat": 24.7324,
+    "lng": 46.6891,
+    "createdAt": "2025-09-19T17:20:00Z"
+  },
+  {
+    "id": "rpt-005",
+    "category": "Environment",
+    "subcategory": "Flooding",
+    "description": "Water accumulation after heavy rain.",
+    "mediaUrls": [
+      "https://example.com/media/flood1.jpg"
+    ],
+    "lat": 24.7356,
+    "lng": 46.6957,
+    "createdAt": "2025-09-19T16:58:00Z"
+  },
+  {
+    "id": "rpt-006",
+    "category": "Safety",
+    "subcategory": "Suspicious activity",
+    "description": "Unattended bag reported near metro station.",
+    "mediaUrls": [],
+    "lat": 24.7412,
+    "lng": 46.6807,
+    "createdAt": "2025-09-19T16:25:00Z"
+  },
+  {
+    "id": "rpt-007",
+    "category": "Infrastructure",
+    "subcategory": "Broken streetlight",
+    "description": "Streetlight flickering all night at Zone 5.",
+    "mediaUrls": [],
+    "lat": 24.7468,
+    "lng": 46.6704,
+    "createdAt": "2025-09-19T15:40:00Z"
+  },
+  {
+    "id": "rpt-008",
+    "category": "Emergency",
+    "subcategory": "Medical",
+    "description": "Need assistance for injured pedestrian.",
+    "mediaUrls": [],
+    "lat": 24.7513,
+    "lng": 46.6672,
+    "createdAt": "2025-09-19T15:15:00Z"
+  },
+  {
+    "id": "rpt-009",
+    "category": "Utilities",
+    "subcategory": "Water leak",
+    "description": "Major water pipe burst close to Riyadh Avenue.",
+    "mediaUrls": [],
+    "lat": 24.7605,
+    "lng": 46.6601,
+    "createdAt": "2025-09-19T14:55:00Z"
+  },
+  {
+    "id": "rpt-010",
+    "category": "Community",
+    "subcategory": "Event",
+    "description": "Community gathering causing parking congestion.",
+    "mediaUrls": [],
+    "lat": 24.7652,
+    "lng": 46.6502,
+    "createdAt": "2025-09-19T14:10:00Z"
+  }
+]

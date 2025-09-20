@@ -1,0 +1,152 @@
+﻿import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
+import 'package:go_router/go_router.dart';
+
+import 'package:spotnsend/features/auth/login_page.dart';
+import 'package:spotnsend/features/auth/providers/auth_providers.dart';
+import 'package:spotnsend/features/auth/signup_step1_page.dart';
+import 'package:spotnsend/features/auth/signup_step2_id_page.dart';
+import 'package:spotnsend/features/auth/signup_step3_selfie_page.dart';
+import 'package:spotnsend/features/home/account/account_page.dart';
+import 'package:spotnsend/features/home/map/map_page.dart';
+import 'package:spotnsend/features/home/map/map_list_view.dart';
+import 'package:spotnsend/features/home/notifications/notifications_page.dart';
+import 'package:spotnsend/features/home/report/report_page.dart';
+import 'package:spotnsend/features/home/settings/settings_page.dart';
+import 'package:spotnsend/features/home/shell.dart';
+import 'routes.dart';
+
+final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
+
+final routerNotifierProvider = Provider<RouterNotifier>((ref) {
+  return RouterNotifier(ref);
+});
+
+final appRouterProvider = Provider<GoRouter>((ref) {
+  final notifier = ref.watch(routerNotifierProvider);
+
+  return GoRouter(
+    navigatorKey: _rootNavigatorKey,
+    initialLocation: RoutePaths.login,
+    refreshListenable: notifier,
+    redirect: notifier.redirect,
+    routes: [
+      GoRoute(
+        path: RoutePaths.login,
+        name: AppRoute.login.name,
+        builder: (context, state) => const LoginPage(),
+      ),
+      GoRoute(
+        path: RoutePaths.signupStep1,
+        name: AppRoute.signupStep1.name,
+        builder: (context, state) => const SignupStep1Page(),
+      ),
+      GoRoute(
+        path: RoutePaths.signupStep2,
+        name: AppRoute.signupStep2.name,
+        builder: (context, state) => const SignupStep2IdPage(),
+      ),
+      GoRoute(
+        path: RoutePaths.signupStep3,
+        name: AppRoute.signupStep3.name,
+        builder: (context, state) => const SignupStep3SelfiePage(),
+      ),
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) => HomeShell(navigationShell: navigationShell),
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: 'map',
+                name: AppRoute.homeMap.name,
+                builder: (context, state) => const MapPage(),
+                routes: [
+                  GoRoute(
+                    path: 'list',
+                    name: 'map_list_view',
+                    parentNavigatorKey: _rootNavigatorKey,
+                    builder: (context, state) => const MapListView(),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: 'report',
+                name: AppRoute.homeReport.name,
+                builder: (context, state) => const ReportPage(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: 'notifications',
+                name: AppRoute.homeNotifications.name,
+                builder: (context, state) => const NotificationsPage(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: 'account',
+                name: AppRoute.homeAccount.name,
+                builder: (context, state) => const AccountPage(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: 'settings',
+                name: AppRoute.homeSettings.name,
+                builder: (context, state) => const SettingsPage(),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ],
+  );
+});
+
+class RouterNotifier extends ChangeNotifier {
+  RouterNotifier(this.ref) {
+    ref.listen<AuthState>(authControllerProvider, (_, __) => notifyListeners());
+  }
+
+  final Ref ref;
+
+  String? redirect(BuildContext context, GoRouterState state) {
+    final authState = ref.read(authControllerProvider);
+    final location = state.uri.toString();
+
+    final isGoingToAuth = location == RoutePaths.login ||
+        location == RoutePaths.signupStep1 ||
+        location == RoutePaths.signupStep2 ||
+        location == RoutePaths.signupStep3;
+
+    if (!authState.isAuthenticated) {
+      if (isGoingToAuth) {
+        return null;
+      }
+      return RoutePaths.login;
+    }
+
+    if (authState.isAuthenticated && isGoingToAuth) {
+      return RoutePaths.homeMap;
+    }
+
+    if (authState.isPendingVerification && location == RoutePaths.homeReport) {
+      return RoutePaths.homeMap;
+    }
+
+    return null;
+  }
+}
+
+
