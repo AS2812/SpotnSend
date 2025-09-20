@@ -1,0 +1,30 @@
+﻿[
+  {
+    "id": "ntf-001",
+    "title": "Fire alert",
+    "body": "Fire responders dispatched to King Abdullah Road.",
+    "seen": false,
+    "createdAt": "2025-09-19T20:20:00Z"
+  },
+  {
+    "id": "ntf-002",
+    "title": "New pothole report",
+    "body": "City maintenance scheduled for tomorrow at 09:00.",
+    "seen": true,
+    "createdAt": "2025-09-19T19:05:00Z"
+  },
+  {
+    "id": "ntf-003",
+    "title": "Account pending",
+    "body": "Verification review underway, expect confirmation soon.",
+    "seen": false,
+    "createdAt": "2025-09-19T18:30:00Z"
+  },
+  {
+    "id": "ntf-004",
+    "title": "Outage resolved",
+    "body": "Power restored for District 12 residents.",
+    "seen": true,
+    "createdAt": "2025-09-19T17:45:00Z"
+  }
+]
