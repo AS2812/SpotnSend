@@ -9,6 +9,10 @@ class RoutePaths {
   static const String homeNotifications = '/home/notifications';
   static const String homeAccount = '/home/account';
   static const String homeSettings = '/home/settings';
+  static const String termsConditions = '/terms-conditions';
+  static const String userGuide = '/user-guide';
+  static const String changePassword = '/change-password';
+  static const String reportBug = '/report-bug';
 }
 
 enum AppRoute {
@@ -21,7 +25,11 @@ enum AppRoute {
   homeReport(RoutePaths.homeReport),
   homeNotifications(RoutePaths.homeNotifications),
   homeAccount(RoutePaths.homeAccount),
-  homeSettings(RoutePaths.homeSettings);
+  homeSettings(RoutePaths.homeSettings),
+  termsConditions(RoutePaths.termsConditions),
+  userGuide(RoutePaths.userGuide),
+  changePassword(RoutePaths.changePassword),
+  reportBug(RoutePaths.reportBug);
 
   const AppRoute(this.path);
   final String path;

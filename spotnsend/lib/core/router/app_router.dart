@@ -14,6 +14,10 @@ import 'package:spotnsend/features/home/notifications/notifications_page.dart';
 import 'package:spotnsend/features/home/report/report_page.dart';
 import 'package:spotnsend/features/home/settings/settings_page.dart';
 import 'package:spotnsend/features/home/shell.dart';
+import 'package:spotnsend/features/legal/terms_conditions_page.dart';
+import 'package:spotnsend/features/legal/user_guide_page.dart';
+import 'package:spotnsend/features/account/change_password_page.dart';
+import 'package:spotnsend/features/support/report_bug_page.dart';
 import 'routes.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
@@ -55,12 +59,34 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         name: AppRoute.signupStep3.name,
         builder: (context, state) => const SignupStep3SelfiePage(),
       ),
+      // Legal and Support Pages
+      GoRoute(
+        path: RoutePaths.termsConditions,
+        name: AppRoute.termsConditions.name,
+        builder: (context, state) => const TermsConditionsPage(),
+      ),
+      GoRoute(
+        path: RoutePaths.userGuide,
+        name: AppRoute.userGuide.name,
+        builder: (context, state) => const UserGuidePage(),
+      ),
+      GoRoute(
+        path: RoutePaths.changePassword,
+        name: AppRoute.changePassword.name,
+        builder: (context, state) => const ChangePasswordPage(),
+      ),
+      GoRoute(
+        path: RoutePaths.reportBug,
+        name: AppRoute.reportBug.name,
+        builder: (context, state) => const ReportBugPage(),
+      ),
       GoRoute(
         path: RoutePaths.home,
         redirect: (_, __) => RoutePaths.homeMap,
       ),
       StatefulShellRoute.indexedStack(
-        builder: (context, state, navigationShell) => HomeShell(navigationShell: navigationShell),
+        builder: (context, state, navigationShell) =>
+            HomeShell(navigationShell: navigationShell),
         branches: [
           StatefulShellBranch(
             routes: [
@@ -159,6 +185,3 @@ class RouterNotifier extends ChangeNotifier {
     return null;
   }
 }
-
-
-

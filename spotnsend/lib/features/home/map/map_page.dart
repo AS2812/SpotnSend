@@ -25,26 +25,30 @@ class _MapPageState extends ConsumerState<MapPage> {
   MaplibreMapController? _controller;
   final Map<String, Report> _reportBySymbol = {};
   LatLng _initialCenter = const LatLng(24.7136, 46.6753);
-  final double _initialZoom = 12;
+  final double _initialZoom = 14; // Closer zoom for better user location view
   Circle? _radiusCircle;
   LatLng? _userLocation;
+  Symbol? _userLocationMarker;
 
   @override
   void initState() {
     super.initState();
+    // Immediately try to get user location and center map
+    _centerToUserLocation();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.listen<AsyncValue<LocationData?>>(currentLocationProvider,
           (previous, next) {
         next.whenOrNull(data: (data) {
           if (data != null) {
-            final target = LatLng(data.latitude ?? _initialCenter.latitude,
-                data.longitude ?? _initialCenter.longitude);
+            final target = LatLng(data.latitude!, data.longitude!);
             _initialCenter = target;
             _userLocation = target;
 
-            // Auto-center map to user location when opened
+            // Always center map to user location
             if (_controller != null) {
               _controller!.animateCamera(CameraUpdate.newLatLng(target));
+              _addUserLocationMarker(target);
               _updateRadiusCircle();
             }
           }
@@ -84,6 +88,36 @@ class _MapPageState extends ConsumerState<MapPage> {
     }
   }
 
+  Future<void> _centerToUserLocation() async {
+    final locationAsync = ref.read(currentLocationProvider);
+    locationAsync.whenData((data) {
+      if (data != null) {
+        final target = LatLng(data.latitude!, data.longitude!);
+        _initialCenter = target;
+        _userLocation = target;
+      }
+    });
+  }
+
+  Future<void> _addUserLocationMarker(LatLng location) async {
+    if (_controller == null) return;
+
+    // Remove existing user marker
+    if (_userLocationMarker != null) {
+      await _controller!.removeSymbol(_userLocationMarker!);
+    }
+
+    // Add user location marker with distinct style
+    _userLocationMarker = await _controller!.addSymbol(
+      SymbolOptions(
+        geometry: location,
+        iconImage: 'marker-15',
+        iconColor: '#4CAF50', // Green color for user location
+        iconSize: 1.6,
+      ),
+    );
+  }
+
   Future<void> _updateRadiusCircle() async {
     if (_controller == null || _userLocation == null) return;
 
@@ -99,10 +133,10 @@ class _MapPageState extends ConsumerState<MapPage> {
         geometry: _userLocation!,
         circleRadius: filters.radiusKm * 1000, // Convert km to meters
         circleColor: '#2196F3',
-        circleOpacity: 0.2,
+        circleOpacity: 0.15,
         circleStrokeColor: '#2196F3',
         circleStrokeWidth: 2,
-        circleStrokeOpacity: 0.8,
+        circleStrokeOpacity: 0.6,
       ),
     );
   }
@@ -131,9 +165,11 @@ class _MapPageState extends ConsumerState<MapPage> {
           Positioned.fill(
             child: MaplibreMap(
               styleString: mapStyleUrl,
-              initialCameraPosition:
-                  CameraPosition(target: _initialCenter, zoom: _initialZoom),
+              initialCameraPosition: CameraPosition(
+                  target: _userLocation ?? _initialCenter, zoom: _initialZoom),
               myLocationEnabled: permissionAsync.value ?? false,
+              myLocationTrackingMode: MyLocationTrackingMode.tracking,
+              myLocationRenderMode: MyLocationRenderMode.gps,
               compassEnabled: true,
               trackCameraPosition: true,
               onMapCreated: (controller) async {
@@ -145,13 +181,20 @@ class _MapPageState extends ConsumerState<MapPage> {
                   }
                 });
 
-                // Center to user location when map is created
+                // Immediately center to user location when map is created
                 final locationAsync = ref.read(currentLocationProvider);
                 locationAsync.whenData((data) {
                   if (data != null) {
                     final target = LatLng(data.latitude!, data.longitude!);
                     _userLocation = target;
-                    controller.animateCamera(CameraUpdate.newLatLng(target));
+                    _initialCenter = target;
+
+                    // Force camera to user location with higher zoom
+                    controller.animateCamera(CameraUpdate.newCameraPosition(
+                      CameraPosition(target: target, zoom: 16),
+                    ));
+
+                    _addUserLocationMarker(target);
                     _updateRadiusCircle();
                   }
                 });

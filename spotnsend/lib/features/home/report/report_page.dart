@@ -120,24 +120,37 @@ class _ReportPageState extends ConsumerState<ReportPage> {
             const SizedBox(height: 16),
             DropdownButtonFormField<int>(
               decoration: InputDecoration(labelText: 'Sub-category'.tr()),
-              value: formState.subcategoryId,
-              items: [
-                for (final subcategory in subcategories)
-                  DropdownMenuItem<int>(
-                      value: subcategory.id,
-                      child: Text(subcategory.name.tr())),
-              ],
-              onChanged: (value) {
-                if (value == null) {
-                  ref.read(reportFormProvider.notifier).updateSubcategory(null);
-                  return;
-                }
-                final selected = subcategories
-                    .firstWhere((subcategory) => subcategory.id == value);
-                ref
-                    .read(reportFormProvider.notifier)
-                    .updateSubcategory(selected);
-              },
+              value: subcategories
+                      .any((sub) => sub.id == formState.subcategoryId)
+                  ? formState.subcategoryId
+                  : null, // Reset value if it doesn't exist in current subcategories
+              items: subcategories.isEmpty
+                  ? [
+                      DropdownMenuItem<int>(
+                          value: null,
+                          child: Text('Select category first'.tr()))
+                    ]
+                  : [
+                      for (final subcategory in subcategories)
+                        DropdownMenuItem<int>(
+                            value: subcategory.id,
+                            child: Text(subcategory.name.tr())),
+                    ],
+              onChanged: subcategories.isEmpty
+                  ? null
+                  : (value) {
+                      if (value == null) {
+                        ref
+                            .read(reportFormProvider.notifier)
+                            .updateSubcategory(null);
+                        return;
+                      }
+                      final selected = subcategories
+                          .firstWhere((subcategory) => subcategory.id == value);
+                      ref
+                          .read(reportFormProvider.notifier)
+                          .updateSubcategory(selected);
+                    },
               validator: (value) =>
                   value == null ? 'Select a sub-category'.tr() : null,
             ),

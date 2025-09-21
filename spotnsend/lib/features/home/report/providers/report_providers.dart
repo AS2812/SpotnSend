@@ -11,16 +11,34 @@ final reportCategoriesProvider = Provider<List<ReportCategory>>((ref) {
 });
 
 final selectedCategoryProvider = Provider<ReportCategory?>((ref) {
+  final formState = ref.watch(reportFormProvider);
   final categories = ref.watch(reportCategoriesProvider);
-  if (categories.isEmpty) {
-    return null;
+
+  if (formState.categoryId != null && categories.isNotEmpty) {
+    try {
+      return categories.firstWhere((cat) => cat.id == formState.categoryId);
+    } catch (e) {
+      return categories.first;
+    }
   }
-  return categories.first;
+
+  return null;
 });
 
 final reportSubcategoriesProvider = Provider<List<ReportSubcategory>>((ref) {
-  final selectedCategory = ref.watch(selectedCategoryProvider);
-  return selectedCategory?.subcategories ?? [];
+  final formState = ref.watch(reportFormProvider);
+  final categories = ref.watch(reportCategoriesProvider);
+
+  // Find category by ID from form state
+  if (formState.categoryId != null) {
+    final category = categories.firstWhere(
+      (cat) => cat.id == formState.categoryId,
+      orElse: () => categories.first,
+    );
+    return category.subcategories;
+  }
+
+  return [];
 });
 
 final reportFormProvider =
@@ -38,6 +56,9 @@ class ReportFormNotifier extends Notifier<ReportFormData> {
     state = state.copyWith(
       categoryId: category?.id,
       categoryName: category?.name,
+      // Reset subcategory when category changes
+      subcategoryId: null,
+      subcategoryName: null,
     );
   }
 

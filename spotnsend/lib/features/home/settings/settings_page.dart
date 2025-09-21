@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:spotnsend/data/models/settings_models.dart';
 import 'package:spotnsend/features/auth/providers/auth_providers.dart';
@@ -105,32 +106,29 @@ class SettingsPage extends ConsumerWidget {
           ListTile(
             leading: const Icon(Icons.lock_reset_rounded),
             title: Text('Change password'.tr()),
-            onTap: () => showSuccessToast(
-                context, 'Password reset flow coming soon.'.tr()),
+            onTap: () => context.push('/change-password'),
           ),
           ListTile(
             leading: const Icon(Icons.support_agent_rounded),
             title: Text('Contact support'.tr()),
             subtitle: Text(settings.contactEmail),
-            onTap: () => showSuccessToast(context, 'Contact us at '.tr()),
+            onTap: () => showSuccessToast(
+                context, 'Contact us at ${settings.contactEmail}'),
           ),
           ListTile(
             leading: const Icon(Icons.menu_book_rounded),
             title: Text('User guide'.tr()),
-            onTap: () => showSuccessToast(
-                context, 'User guide will open in a future update.'.tr()),
+            onTap: () => context.push('/user-guide'),
           ),
           ListTile(
             leading: const Icon(Icons.bug_report_rounded),
             title: Text('Report a bug'.tr()),
-            onTap: () =>
-                showSuccessToast(context, 'Bug report form coming soon.'.tr()),
+            onTap: () => context.push('/report-bug'),
           ),
           ListTile(
             leading: const Icon(Icons.article_rounded),
             title: Text('Terms & Conditions'.tr()),
-            onTap: () => showSuccessToast(
-                context, 'Terms & Conditions screen placeholder.'.tr()),
+            onTap: () => context.push('/terms-conditions'),
           ),
           const SizedBox(height: 24),
           ListTile(
