@@ -1,4 +1,4 @@
-import 'package:file_picker/file_picker.dart';
+﻿import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,6 +11,7 @@ import '../../widgets/app_text_field.dart';
 import '../../widgets/toasts.dart';
 import 'providers/auth_providers.dart';
 import 'widgets/auth_header.dart';
+import 'package:spotnsend/l10n/app_localizations.dart';
 
 class SignupStep2IdPage extends ConsumerStatefulWidget {
   const SignupStep2IdPage({super.key});
@@ -56,7 +57,7 @@ class _SignupStep2IdPageState extends ConsumerState<SignupStep2IdPage> {
     }
 
     if (_frontPath == null || _backPath == null) {
-      showErrorToast(context, 'Please upload both sides of your ID');
+      showErrorToast(context, 'Please upload both sides of your ID'.tr());
       return;
     }
 
@@ -88,9 +89,9 @@ class _SignupStep2IdPageState extends ConsumerState<SignupStep2IdPage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            const AuthGradientHeader(
-              title: 'Verify your identity',
-              subtitle: 'Upload your national ID so we can keep reporting trusted.',
+            AuthGradientHeader(
+              title: 'Verify your identity'.tr(),
+              subtitle: 'Upload your national ID so we can keep reporting trusted.'.tr(),
             ),
             Padding(
               padding: const EdgeInsets.all(24),
@@ -101,31 +102,31 @@ class _SignupStep2IdPageState extends ConsumerState<SignupStep2IdPage> {
                   children: [
                     AppTextField(
                       controller: _idNumberController,
-                      label: 'National ID number',
+                      label: 'National ID number'.tr(),
                       keyboardType: TextInputType.number,
-                      validator: (value) => validateNotEmpty(value, fieldName: 'National ID number'),
+                      validator: (value) => validateNotEmpty(context, value, fieldName: 'National ID number'.tr()),
                     ),
                     const SizedBox(height: 24),
                     _UploadTile(
-                      title: 'Front of ID',
-                      subtitle: _frontPath ?? 'Upload a clear image of the front side',
+                      title: 'Front of ID'.tr(),
+                      subtitle: _frontPath ?? 'Upload a clear image of the front side'.tr(),
                       onTap: () => _pickFile(true),
                     ),
                     const SizedBox(height: 16),
                     _UploadTile(
-                      title: 'Back of ID',
-                      subtitle: _backPath ?? 'Upload a clear image of the back side',
+                      title: 'Back of ID'.tr(),
+                      subtitle: _backPath ?? 'Upload a clear image of the back side'.tr(),
                       onTap: () => _pickFile(false),
                     ),
                     const SizedBox(height: 32),
                     AppButton(
-                      label: 'Continue to selfie verification',
+                      label: 'Continue to selfie verification'.tr(),
                       onPressed: authState.isLoading ? null : _submit,
                       loading: authState.isLoading,
                     ),
                     const SizedBox(height: 16),
                     AppButton(
-                      label: 'Back to info',
+                      label: 'Back to info'.tr(),
                       variant: ButtonVariant.secondary,
                       onPressed: () => context.go(RoutePaths.signupStep1),
                     ),
@@ -185,5 +186,3 @@ class _UploadTile extends StatelessWidget {
     );
   }
 }
-
-

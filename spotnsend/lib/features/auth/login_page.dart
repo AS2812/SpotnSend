@@ -10,6 +10,7 @@ import '../../widgets/app_text_field.dart';
 import '../../widgets/back_footer_button.dart';
 import 'providers/auth_providers.dart';
 import 'widgets/auth_header.dart';
+import 'package:spotnsend/l10n/app_localizations.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -60,7 +61,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final authState = ref.watch(authControllerProvider);
 
     ref.listen<AuthState>(authControllerProvider, (previous, next) {
-      if ((previous?.isAuthenticated ?? false) == false && next.isAuthenticated) {
+      if ((previous?.isAuthenticated ?? false) == false &&
+          next.isAuthenticated) {
         context.go(RoutePaths.homeMap);
       }
     });
@@ -71,14 +73,15 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
           onPressed: () => Navigator.of(context).maybePop(),
         ),
-        title: const Text('Login'),
+        title: Text('Login'.tr()),
       ),
       body: SingleChildScrollView(
         child: Column(
           children: [
-            const AuthGradientHeader(
-              title: 'Welcome back to SpotnSend',
-              subtitle: 'Log in to monitor live reports and stay informed.',
+            AuthGradientHeader(
+              title: 'Welcome back to SpotnSend'.tr(),
+              subtitle:
+                  'Log in to monitor live reports and stay informed.'.tr(),
             ),
             Padding(
               padding: const EdgeInsets.all(24),
@@ -89,18 +92,19 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   children: [
                     AppTextField(
                       controller: _identifierController,
-                      label: 'Email or username',
-                      hint: 'Enter your email or username',
-                      validator: (value) => validateNotEmpty(value, fieldName: 'Identifier'),
+                      label: 'Email or username'.tr(),
+                      hint: 'Enter your email or username'.tr(),
+                      validator: (value) => validateNotEmpty(context, value,
+                          fieldName: 'Identifier'.tr()),
                       textInputAction: TextInputAction.next,
                     ),
                     const SizedBox(height: 16),
                     AppTextField(
                       controller: _passwordController,
-                      label: 'Password',
-                      hint: 'Enter your password',
+                      label: 'Password'.tr(),
+                      hint: 'Enter your password'.tr(),
                       obscureText: true,
-                      validator: validatePassword,
+                      validator: (value) => validatePassword(context, value),
                       textInputAction: TextInputAction.done,
                     ),
                     const SizedBox(height: 12),
@@ -108,10 +112,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       children: [
                         Checkbox(
                           value: authState.keepSignedIn,
-                          onChanged: (value) => ref.read(authControllerProvider.notifier).setKeepSignedIn(value ?? false),
+                          onChanged: (value) => ref
+                              .read(authControllerProvider.notifier)
+                              .setKeepSignedIn(value ?? false),
                         ),
                         const SizedBox(width: 8),
-                        const Expanded(child: Text('Keep me signed in')),
+                        Expanded(child: Text('Keep me signed in'.tr())),
                       ],
                     ),
                     if (authState.error != null)
@@ -119,17 +125,18 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         padding: const EdgeInsets.only(bottom: 12),
                         child: Text(
                           authState.error!,
-                          style: TextStyle(color: Theme.of(context).colorScheme.error),
+                          style: TextStyle(
+                              color: Theme.of(context).colorScheme.error),
                         ),
                       ),
                     AppButton(
-                      label: 'Log in',
+                      label: 'Log in'.tr(),
                       onPressed: authState.isLoading ? null : _submit,
                       loading: authState.isLoading,
                     ),
                     const SizedBox(height: 12),
                     AppButton(
-                      label: 'Use tester account',
+                      label: 'Use tester account'.tr(),
                       variant: ButtonVariant.secondary,
                       onPressed: authState.isLoading ? null : _loginTester,
                     ),
@@ -137,17 +144,21 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     Center(
                       child: RichText(
                         text: TextSpan(
-                          text: "Don't have an account? ",
+                          text: "Don't have an account? ".tr(),
                           style: Theme.of(context).textTheme.bodyMedium,
                           children: [
                             TextSpan(
-                              text: 'Sign up',
+                              text: 'Sign up'.tr(),
                               style: Theme.of(context)
                                   .textTheme
                                   .bodyMedium
-                                  ?.copyWith(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w700),
+                                  ?.copyWith(
+                                      color:
+                                          Theme.of(context).colorScheme.primary,
+                                      fontWeight: FontWeight.w700),
                               recognizer: TapGestureRecognizer()
-                                ..onTap = () => context.go(RoutePaths.signupStep1),
+                                ..onTap =
+                                    () => context.go(RoutePaths.signupStep1),
                             ),
                           ],
                         ),

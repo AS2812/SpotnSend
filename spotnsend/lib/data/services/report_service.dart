@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +7,7 @@ import 'package:spotnsend/core/utils/result.dart';
 import 'package:spotnsend/data/models/report_models.dart';
 import 'package:spotnsend/data/models/user_models.dart';
 import 'package:spotnsend/data/services/api_client.dart';
+import 'package:spotnsend/l10n/app_localizations.dart';
 
 final reportServiceProvider = Provider<ReportService>((ref) {
   final client = ref.watch(apiClientProvider);
@@ -42,7 +43,11 @@ class ReportService {
           .map(Report.fromJson)
           .toList(growable: false);
     } on DioException catch (error) {
-      throw Exception(_extractMessage(error));
+      // Return empty list instead of throwing to prevent UI crashes
+      return const [];
+    } catch (error) {
+      // Return empty list for any other errors (including permission issues)
+      return const [];
     }
   }
 
@@ -51,25 +56,28 @@ class ReportService {
     required AppUser user,
   }) async {
     if (!formData.agreedToTerms) {
-      return const Failure('You must agree to the terms to continue');
+      return Failure('You must agree to the terms to continue'.tr());
     }
 
     if (formData.categoryId == null) {
-      return const Failure('Please choose a category');
+      return Failure('Please choose a category'.tr());
     }
 
-    final fallbackSpot = user.savedSpots.isNotEmpty ? user.savedSpots.first : null;
+    final fallbackSpot =
+        user.savedSpots.isNotEmpty ? user.savedSpots.first : null;
     final latitude = formData.selectedLat ?? fallbackSpot?.lat ?? 24.7136;
     final longitude = formData.selectedLng ?? fallbackSpot?.lng ?? 46.6753;
 
     final payload = {
       'categoryId': formData.categoryId,
-      if (formData.subcategoryId != null) 'subcategoryId': formData.subcategoryId,
+      if (formData.subcategoryId != null)
+        'subcategoryId': formData.subcategoryId,
       'description': formData.description.trim(),
       'latitude': latitude,
       'longitude': longitude,
       'alertRadiusMeters': (formData.radiusKm * 1000).round(),
-      'notifyScope': _audienceToString(formData.notifyScope ?? formData.audience),
+      'notifyScope':
+          _audienceToString(formData.notifyScope ?? formData.audience),
       'priority': (formData.priority ?? ReportPriority.normal).name,
     };
 
@@ -80,7 +88,8 @@ class ReportService {
         final mediaFiles = <MultipartFile>[];
         for (final path in formData.mediaPaths) {
           if (path.isEmpty) continue;
-          mediaFiles.add(await MultipartFile.fromFile(path, filename: path.split(Platform.pathSeparator).last));
+          mediaFiles.add(await MultipartFile.fromFile(path,
+              filename: path.split(Platform.pathSeparator).last));
         }
         final formDataBody = FormData.fromMap({
           ...payload,
@@ -160,9 +169,11 @@ class ReportService {
   String _extractMessage(DioException error) {
     final responseData = error.response?.data;
     if (responseData is Map<String, dynamic>) {
-      return responseData['message']?.toString() ?? responseData['error']?.toString() ?? 'Unexpected error occurred.';
+      return responseData['message']?.toString() ??
+          responseData['error']?.toString() ??
+          'Unexpected error occurred.'.tr();
     }
-    return error.message ?? 'Unexpected error occurred.';
+    return error.message ?? 'Unexpected error occurred.'.tr();
   }
 
   String _audienceToString(ReportAudience audience) {

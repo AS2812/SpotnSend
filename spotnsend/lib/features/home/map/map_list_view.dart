@@ -7,6 +7,7 @@ import 'package:spotnsend/data/models/report_models.dart';
 import 'package:spotnsend/widgets/app_button.dart';
 import 'package:spotnsend/widgets/empty_state.dart';
 import 'package:spotnsend/features/home/map/providers/map_providers.dart';
+import 'package:spotnsend/l10n/app_localizations.dart';
 
 class MapListView extends ConsumerWidget {
   const MapListView({super.key});
@@ -16,7 +17,7 @@ class MapListView extends ConsumerWidget {
     final reportsAsync = ref.watch(nearbyReportsProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Latest reports nearby'),
+        title: Text('Latest reports nearby'.tr()),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => context.pop(),
@@ -31,10 +32,10 @@ class MapListView extends ConsumerWidget {
       body: reportsAsync.when(
         data: (reports) {
           if (reports.isEmpty) {
-            return const EmptyState(
+            return EmptyState(
               icon: Icons.location_off_rounded,
-              title: 'No reports in range',
-              message: 'Try increasing your radius or adjust filters to see more activity.',
+              title: 'No reports in range'.tr(),
+              message: 'Try increasing your radius or adjust filters to see more activity.'.tr(),
             );
           }
           return ListView.separated(
@@ -47,14 +48,14 @@ class MapListView extends ConsumerWidget {
             },
           );
         },
-        error: (error, _) => Center(child: Text('Failed to load reports: $error')),
+        error: (error, _) => Center(child: Text('Failed to load reports: {error}'.tr(params: {'error': '$error'}))),
         loading: () => const Center(child: CircularProgressIndicator()),
       ),
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: AppButton(
-            label: 'Back to map',
+            label: 'Back to map'.tr(),
             onPressed: () => context.pop(),
             variant: ButtonVariant.secondary,
             icon: Icons.map_rounded,
@@ -92,9 +93,9 @@ class _ReportTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(report.category, style: Theme.of(context).textTheme.titleLarge),
+                    Text(report.category.tr(), style: Theme.of(context).textTheme.titleLarge),
                     const SizedBox(height: 4),
-                    Text(report.subcategory, style: Theme.of(context).textTheme.bodyMedium),
+                    Text(report.subcategory.tr(), style: Theme.of(context).textTheme.bodyMedium),
                   ],
                 ),
               ),
@@ -115,10 +116,3 @@ class _ReportTile extends StatelessWidget {
     );
   }
 }
-
-
-
-
-
-
-

@@ -1,18 +1,24 @@
 ﻿import 'package:intl/intl.dart';
 
+import 'package:spotnsend/l10n/app_localizations.dart';
+
 String formatDateTime(DateTime dateTime) {
-  final formatter = DateFormat('MMM d • h:mm a');
+  final locale = AppLocalizations.current.locale.languageCode;
+  final pattern = locale == 'ar' ? 'd MMM · h:mm a' : 'MMM d · h:mm a';
+  final formatter = DateFormat(pattern, locale);
   return formatter.format(dateTime.toLocal());
 }
 
 String formatShortDate(DateTime dateTime) {
-  final formatter = DateFormat('MM/dd/yyyy');
+  final locale = AppLocalizations.current.locale.languageCode;
+  final pattern = locale == 'ar' ? 'dd/MM/yyyy' : 'MM/dd/yyyy';
+  final formatter = DateFormat(pattern, locale);
   return formatter.format(dateTime.toLocal());
 }
 
 String formatDistanceKm(double distanceKm) {
   final formatted = distanceKm % 1 == 0 ? distanceKm.toStringAsFixed(0) : distanceKm.toStringAsFixed(1);
-  return '$formatted km';
+  return AppLocalizations.current.translate('{value} km', params: {'value': formatted});
 }
 
 String maskIdNumber(String idNumber) {

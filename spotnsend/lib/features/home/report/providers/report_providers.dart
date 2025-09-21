@@ -1,9 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 import 'package:spotnsend/core/utils/result.dart';
 import 'package:spotnsend/data/models/report_models.dart';
-import 'package:spotnsend/data/models/user_models.dart';
 import 'package:spotnsend/data/services/report_service.dart';
 import 'package:spotnsend/features/auth/providers/auth_providers.dart';
 
@@ -13,31 +11,28 @@ final reportCategoriesProvider = Provider<List<ReportCategory>>((ref) {
 });
 
 final selectedCategoryProvider = Provider<ReportCategory?>((ref) {
-  final form = ref.watch(reportFormProvider);
   final categories = ref.watch(reportCategoriesProvider);
-  for (final category in categories) {
-    if (category.id == form.categoryId) {
-      return category;
-    }
+  if (categories.isEmpty) {
+    return null;
   }
-  return null;
+  return categories.first;
 });
 
-final reportFormProvider = StateNotifierProvider<ReportFormNotifier, ReportFormData>((ref) {
-  return ReportFormNotifier(ref);
+final reportFormProvider =
+    NotifierProvider<ReportFormNotifier, ReportFormData>(() {
+  return ReportFormNotifier();
 });
 
-class ReportFormNotifier extends StateNotifier<ReportFormData> {
-  ReportFormNotifier(this.ref) : super(ReportFormData());
-
-  final Ref ref;
+class ReportFormNotifier extends Notifier<ReportFormData> {
+  @override
+  ReportFormData build() {
+    return ReportFormData();
+  }
 
   void updateCategory(ReportCategory? category) {
     state = state.copyWith(
       categoryId: category?.id,
       categoryName: category?.name,
-      subcategoryId: null,
-      subcategoryName: null,
     );
   }
 
@@ -48,20 +43,39 @@ class ReportFormNotifier extends StateNotifier<ReportFormData> {
     );
   }
 
+  void updateLocation(double? lat, double? lng) {
+    state = state.copyWith(
+      selectedLat: lat,
+      selectedLng: lng,
+    );
+  }
+
   void updateDescription(String description) {
     state = state.copyWith(description: description);
+  }
+
+  void setAudience(ReportAudience audience) {
+    state = state.copyWith(audience: audience);
   }
 
   void toggleAudience(ReportAudience audience) {
     state = state.copyWith(audience: audience);
   }
 
+  void setCurrentLocation(bool value) {
+    state = state.copyWith(useCurrentLocation: value);
+  }
+
   void setUseCurrentLocation(bool value) {
     state = state.copyWith(useCurrentLocation: value);
   }
 
-  void setSelectedLocation(double lat, double lng) {
+  void setCoordinates(double lat, double lng) {
     state = state.copyWith(selectedLat: lat, selectedLng: lng);
+  }
+
+  void setAgreedToTerms(bool agreed) {
+    state = state.copyWith(agreedToTerms: agreed);
   }
 
   void setAgreement(bool agreed) {
@@ -77,24 +91,16 @@ class ReportFormNotifier extends StateNotifier<ReportFormData> {
   }
 
   Future<Result<Report>> submit() async {
-    final reportService = ref.read(reportServiceProvider);
     final authState = ref.read(authControllerProvider);
     final user = authState.user;
-    if (user == null) {
-      return const Failure('You must be signed in to submit a report');
-    }
+    if (user == null)
+      return const Failure('You must be logged in to submit a report.');
+
+    final reportService = ref.read(reportServiceProvider);
     final result = await reportService.submit(formData: state, user: user);
-    if (result.isSuccess) {
+    if (result is Success) {
       reset();
     }
     return result;
   }
 }
-
-final reportSubcategoriesProvider = Provider<List<ReportSubcategory>>((ref) {
-  final category = ref.watch(selectedCategoryProvider);
-  if (category == null) {
-    return const [];
-  }
-  return category.subcategories;
-});

@@ -1,4 +1,4 @@
-import 'package:flutter/gestures.dart';
+﻿import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,6 +11,7 @@ import '../../widgets/app_text_field.dart';
 import '../../widgets/toasts.dart';
 import 'providers/auth_providers.dart';
 import 'widgets/auth_header.dart';
+import 'package:spotnsend/l10n/app_localizations.dart';
 
 class SignupStep1Page extends ConsumerStatefulWidget {
   const SignupStep1Page({super.key});
@@ -87,9 +88,9 @@ class _SignupStep1PageState extends ConsumerState<SignupStep1Page> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            const AuthGradientHeader(
-              title: 'Create your SpotnSend account',
-              subtitle: 'We need a few details to set up your secure profile.',
+            AuthGradientHeader(
+              title: 'Create your SpotnSend account'.tr(),
+              subtitle: 'We need a few details to set up your secure profile.'.tr(),
             ),
             Padding(
               padding: const EdgeInsets.all(24),
@@ -100,52 +101,52 @@ class _SignupStep1PageState extends ConsumerState<SignupStep1Page> {
                   children: [
                     AppTextField(
                       controller: _fullNameController,
-                      label: 'Full name',
-                      validator: (value) => validateNotEmpty(value, fieldName: 'Full name'),
+                      label: 'Full name'.tr(),
+                      validator: (value) => validateNotEmpty(context, value, fieldName: 'Full name'.tr()),
                       textInputAction: TextInputAction.next,
                     ),
                     const SizedBox(height: 16),
                     AppTextField(
                       controller: _usernameController,
-                      label: 'Username',
-                      validator: (value) => validateNotEmpty(value, fieldName: 'Username'),
+                      label: 'Username'.tr(),
+                      validator: (value) => validateNotEmpty(context, value, fieldName: 'Username'.tr()),
                       textInputAction: TextInputAction.next,
                     ),
                     const SizedBox(height: 16),
                     AppTextField(
                       controller: _emailController,
-                      label: 'Email',
+                      label: 'Email'.tr(),
                       keyboardType: TextInputType.emailAddress,
-                      validator: validateEmail,
+                      validator: (value) => validateEmail(context, value),
                       textInputAction: TextInputAction.next,
                     ),
                     const SizedBox(height: 16),
                     AppTextField(
                       controller: _phoneController,
-                      label: 'Phone number',
+                      label: 'Phone number'.tr(),
                       keyboardType: TextInputType.phone,
-                      validator: validatePhone,
+                      validator: (value) => validatePhone(context, value),
                       textInputAction: TextInputAction.next,
                     ),
                     const SizedBox(height: 16),
                     AppTextField(
                       controller: _passwordController,
-                      label: 'Password',
+                      label: 'Password'.tr(),
                       obscureText: true,
-                      validator: validatePassword,
+                      validator: (value) => validatePassword(context, value),
                       textInputAction: TextInputAction.next,
                     ),
                     const SizedBox(height: 16),
                     AppTextField(
                       controller: _otpController,
-                      label: 'SMS verification code',
+                      label: 'SMS verification code'.tr(),
                       keyboardType: TextInputType.number,
-                      validator: validateOtp,
+                      validator: (value) => validateOtp(context, value),
                       textInputAction: TextInputAction.done,
                     ),
                     const SizedBox(height: 24),
                     AppButton(
-                      label: 'Continue to ID verification',
+                      label: 'Continue to ID verification'.tr(),
                       onPressed: authState.isLoading ? null : _submit,
                       loading: authState.isLoading,
                     ),
@@ -153,11 +154,11 @@ class _SignupStep1PageState extends ConsumerState<SignupStep1Page> {
                     Center(
                       child: RichText(
                         text: TextSpan(
-                          text: 'Already have an account? ',
+                          text: 'Already have an account? '.tr(),
                           style: Theme.of(context).textTheme.bodyMedium,
                           children: [
                             TextSpan(
-                              text: 'Log in',
+                              text: 'Log in'.tr(),
                               style: Theme.of(context)
                                   .textTheme
                                   .bodyMedium
@@ -178,5 +179,3 @@ class _SignupStep1PageState extends ConsumerState<SignupStep1Page> {
     );
   }
 }
-
-

@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:spotnsend/widgets/app_button.dart';
 import 'package:spotnsend/features/home/account/providers/account_providers.dart';
 import 'package:spotnsend/data/services/report_service.dart';
 import 'package:spotnsend/features/home/map/providers/map_providers.dart';
+import 'package:spotnsend/l10n/app_localizations.dart';
 
 class MapFiltersSheet extends ConsumerWidget {
   const MapFiltersSheet({super.key});
@@ -30,17 +31,22 @@ class MapFiltersSheet extends ConsumerWidget {
             child: Container(
               width: 48,
               height: 4,
-              decoration: BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(8)),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade400,
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
           ),
           const SizedBox(height: 24),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Filters', style: Theme.of(context).textTheme.titleLarge),
+              Text('Filters'.tr(),
+                  style: Theme.of(context).textTheme.titleLarge),
               TextButton(
-                onPressed: () => ref.read(mapFiltersProvider.notifier).clearCategories(),
-                child: const Text('Clear'),
+                onPressed: () =>
+                    ref.read(mapFiltersProvider.notifier).clearCategories(),
+                child: Text('Clear'.tr()),
               ),
             ],
           ),
@@ -51,22 +57,27 @@ class MapFiltersSheet extends ConsumerWidget {
             children: [
               for (final category in reportService.categories)
                 FilterChip(
-                  label: Text(category.name),
+                  label: Text(category.name.tr()),
                   selected: filters.categoryIds.contains(category.id),
-                  onSelected: (_) => ref.read(mapFiltersProvider.notifier).toggleCategory(category.id),
+                  onSelected: (_) => ref
+                      .read(mapFiltersProvider.notifier)
+                      .toggleCategory(category.id),
                 ),
             ],
           ),
           const SizedBox(height: 24),
           SwitchListTile(
-            title: const Text('Include saved spots'),
-            subtitle: Text(savedSpots.isEmpty ? 'Add saved spots from account to get proactive alerts.' : 'Your saved spots will always alert you.'),
+            title: Text('Include saved spots'.tr()),
+            subtitle: Text(savedSpots.isEmpty
+                ? 'Add saved spots from account to get proactive alerts.'.tr()
+                : 'Your saved spots will always alert you.'.tr()),
             value: filters.includeSavedSpots,
-            onChanged: (value) => ref.read(mapFiltersProvider.notifier).toggleSavedSpots(value),
+            onChanged: (value) =>
+                ref.read(mapFiltersProvider.notifier).toggleSavedSpots(value),
           ),
           const SizedBox(height: 24),
           AppButton(
-            label: 'Done',
+            label: 'Done'.tr(),
             onPressed: () => Navigator.of(context).pop(),
           ),
         ],
@@ -74,6 +85,3 @@ class MapFiltersSheet extends ConsumerWidget {
     );
   }
 }
-
-
-

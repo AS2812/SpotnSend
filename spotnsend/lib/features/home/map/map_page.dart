@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:location/location.dart';
@@ -12,6 +12,7 @@ import 'package:spotnsend/widgets/toasts.dart';
 import 'package:spotnsend/features/home/map/providers/map_providers.dart';
 import 'package:spotnsend/features/home/map/widgets/filters_sheet.dart';
 import 'package:spotnsend/features/home/map/widgets/legend.dart';
+import 'package:spotnsend/l10n/app_localizations.dart';
 
 class MapPage extends ConsumerStatefulWidget {
   const MapPage({super.key});
@@ -30,17 +31,20 @@ class _MapPageState extends ConsumerState<MapPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.listen<AsyncValue<LocationData?>>(currentLocationProvider, (previous, next) {
+      ref.listen<AsyncValue<LocationData?>>(currentLocationProvider,
+          (previous, next) {
         next.whenOrNull(data: (data) {
           if (data != null && _controller != null) {
-            final target = LatLng(data.latitude ?? _initialCenter.latitude, data.longitude ?? _initialCenter.longitude);
+            final target = LatLng(data.latitude ?? _initialCenter.latitude,
+                data.longitude ?? _initialCenter.longitude);
             _initialCenter = target;
             _controller!.animateCamera(CameraUpdate.newLatLng(target));
           }
         });
       });
 
-      ref.listen<AsyncValue<List<Report>>>(nearbyReportsProvider, (previous, next) {
+      ref.listen<AsyncValue<List<Report>>>(nearbyReportsProvider,
+          (previous, next) {
         next.whenOrNull(data: (reports) => _syncMarkers(reports));
       });
     });
@@ -68,7 +72,8 @@ class _MapPageState extends ConsumerState<MapPage> {
   void _openReportDetails(Report report) {
     showModalBottomSheet<void>(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
       builder: (context) => ReportDetailSheet(report: report),
     );
   }
@@ -88,7 +93,8 @@ class _MapPageState extends ConsumerState<MapPage> {
           Positioned.fill(
             child: MaplibreMap(
               styleString: mapStyleUrl,
-              initialCameraPosition: CameraPosition(target: _initialCenter, zoom: _initialZoom),
+              initialCameraPosition:
+                  CameraPosition(target: _initialCenter, zoom: _initialZoom),
               myLocationEnabled: permissionAsync.value ?? false,
               compassEnabled: true,
               trackCameraPosition: true,
@@ -126,7 +132,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                   children: [
                     Expanded(
                       child: AppButton(
-                        label: 'Filter reports',
+                        label: 'Filter reports'.tr(),
                         variant: ButtonVariant.secondary,
                         icon: Icons.tune,
                         onPressed: () => _openFilters(),
@@ -135,7 +141,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: AppButton(
-                        label: 'List view',
+                        label: 'List view'.tr(),
                         variant: ButtonVariant.secondary,
                         icon: Icons.view_list_rounded,
                         onPressed: () => context.goNamed('map_list_view'),
@@ -155,19 +161,21 @@ class _MapPageState extends ConsumerState<MapPage> {
               onPressed: () async {
                 final location = await ref.read(currentLocationProvider.future);
                 if (location == null) {
-                  showErrorToast(context, 'Enable location permissions to recenter the map.');
+                  showErrorToast(context,
+                      'Enable location permissions to recenter the map.'.tr());
                   return;
                 }
-                final target = LatLng(location.latitude ?? _initialCenter.latitude, location.longitude ?? _initialCenter.longitude);
+                final target = LatLng(
+                    location.latitude ?? _initialCenter.latitude,
+                    location.longitude ?? _initialCenter.longitude);
                 _controller?.animateCamera(CameraUpdate.newLatLng(target));
               },
               child: const Icon(Icons.my_location_rounded),
             ),
           ),
           if (reportsAsync.isLoading && !reportsAsync.hasValue)
-            const _LoadingOverlay(message: 'Loading nearby reports...'),
-          if (missingKey)
-            const _MissingKeyNotice(),
+            _LoadingOverlay(message: 'Loading nearby reports...'.tr()),
+          if (missingKey) const _MissingKeyNotice(),
         ],
       ),
     );
@@ -178,7 +186,8 @@ class _MapPageState extends ConsumerState<MapPage> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(32))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(32))),
       builder: (context) => const MapFiltersSheet(),
     );
   }
@@ -200,14 +209,17 @@ class _RadiusSelector extends ConsumerWidget {
         color: theme.colorScheme.surface.withOpacity(0.92),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 20, offset: const Offset(0, 10)),
+          BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 20,
+              offset: const Offset(0, 10)),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('Search radius', style: theme.textTheme.labelLarge),
+          Text('Search radius'.tr(), style: theme.textTheme.labelLarge),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -217,12 +229,17 @@ class _RadiusSelector extends ConsumerWidget {
                   max: 20,
                   divisions: 19,
                   value: displayValue.toDouble(),
-                  label: '${displayValue.round()} km',
-                  onChanged: (value) => ref.read(mapFiltersProvider.notifier).setRadius(value),
+                  label: AppLocalizations.current.translate('{value} km',
+                      params: {'value': displayValue.round().toString()}),
+                  onChanged: (value) =>
+                      ref.read(mapFiltersProvider.notifier).setRadius(value),
                 ),
               ),
               const SizedBox(width: 12),
-              Text('${displayValue.round()} km', style: theme.textTheme.titleMedium),
+              Text(
+                  AppLocalizations.current.translate('{value} km',
+                      params: {'value': displayValue.round().toString()}),
+                  style: theme.textTheme.titleMedium),
             ],
           ),
         ],
@@ -244,18 +261,24 @@ class _MapHeader extends ConsumerWidget {
         color: Theme.of(context).colorScheme.surface.withOpacity(0.95),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 22, offset: const Offset(0, 12)),
+          BoxShadow(
+              color: Colors.black.withOpacity(0.12),
+              blurRadius: 22,
+              offset: const Offset(0, 12)),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Spot nearby incidents', style: Theme.of(context).textTheme.titleLarge),
+          Text('Spot nearby incidents'.tr(),
+              style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 8),
           Text(
             authState.isPendingVerification
                 ? 'Verification pending. Reporting is locked, but you can explore alerts in your area.'
-                : 'Stay alert with real-time safety intel from your community.',
+                    .tr()
+                : 'Stay alert with real-time safety intel from your community.'
+                    .tr(),
             style: Theme.of(context).textTheme.bodyMedium,
           ),
         ],
@@ -314,13 +337,15 @@ class _MissingKeyNotice extends StatelessWidget {
         children: [
           const Icon(Icons.key, color: Colors.white),
           const SizedBox(height: 12),
-          const Text(
-            'MapTiler key missing',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
+          Text(
+            'MapTiler key missing'.tr(),
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Run the app with --dart-define=MAPTILER_KEY=YOUR_KEY to enable the live map.',
+          Text(
+            'Run the app with --dart-define=MAPTILER_KEY=YOUR_KEY to enable the live map.'
+                .tr(),
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.white70),
           ),
@@ -347,13 +372,17 @@ class ReportDetailSheet extends StatelessWidget {
             width: 48,
             height: 4,
             margin: const EdgeInsets.only(bottom: 16),
-            decoration: BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(8)),
+            decoration: BoxDecoration(
+                color: Colors.grey.shade400,
+                borderRadius: BorderRadius.circular(8)),
           ),
           Text(report.category, style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 4),
-          Text(report.subcategory, style: Theme.of(context).textTheme.bodyMedium),
+          Text(report.subcategory,
+              style: Theme.of(context).textTheme.bodyMedium),
           const SizedBox(height: 16),
-          Text(report.description, style: Theme.of(context).textTheme.bodyLarge),
+          Text(report.description,
+              style: Theme.of(context).textTheme.bodyLarge),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -379,7 +408,7 @@ class ReportDetailSheet extends StatelessWidget {
           Align(
             alignment: Alignment.centerRight,
             child: AppButton(
-              label: 'View list',
+              label: 'View list'.tr(),
               variant: ButtonVariant.secondary,
               onPressed: () {
                 Navigator.of(context).pop();
@@ -392,8 +421,3 @@ class ReportDetailSheet extends StatelessWidget {
     );
   }
 }
-
-
-
-
-

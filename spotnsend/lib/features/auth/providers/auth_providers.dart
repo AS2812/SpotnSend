@@ -1,15 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 import 'package:spotnsend/data/models/auth_models.dart';
 import 'package:spotnsend/data/models/user_models.dart';
 import 'package:spotnsend/data/repositories/auth_repository.dart';
 import 'package:spotnsend/data/services/user_service.dart';
 
-final authControllerProvider = StateNotifierProvider<AuthController, AuthState>((ref) {
-  final authRepository = ref.watch(authRepositoryProvider);
-  final userService = ref.watch(userServiceProvider);
-  return AuthController(ref: ref, authRepository: authRepository, userService: userService);
+final authControllerProvider = NotifierProvider<AuthController, AuthState>(() {
+  return AuthController();
 });
 
 class AuthState {
@@ -26,45 +23,47 @@ class AuthState {
   final bool keepSignedIn;
 
   bool get isAuthenticated => user != null;
-  bool get isVerified => user?.isVerified ?? false;
-  bool get isPendingVerification => user != null && !isVerified;
+  bool get isPendingVerification => user?.status == VerificationStatus.pending;
 
   AuthState copyWith({
     AppUser? user,
     bool? isLoading,
     String? error,
+    bool? resetError = false,
     bool? keepSignedIn,
-    bool resetError = false,
   }) {
     return AuthState(
       user: user ?? this.user,
       isLoading: isLoading ?? this.isLoading,
-      error: resetError ? null : (error ?? this.error),
+      error: resetError == true ? null : error ?? this.error,
       keepSignedIn: keepSignedIn ?? this.keepSignedIn,
     );
   }
 }
 
-class AuthController extends StateNotifier<AuthState> {
-  AuthController({required this.ref, required this.authRepository, required this.userService}) : super(const AuthState());
+class AuthController extends Notifier<AuthState> {
+  late AuthRepository authRepository;
+  late UserService userService;
 
-  final Ref ref;
-  final AuthRepository authRepository;
-  final UserService userService;
+  @override
+  AuthState build() {
+    authRepository = ref.watch(authRepositoryProvider);
+    userService = ref.watch(userServiceProvider);
+    return const AuthState();
+  }
 
-  Future<void> login({required String identifier, required String password}) async {
+  Future<void> login({
+    required String identifier,
+    required String password,
+  }) async {
     state = state.copyWith(isLoading: true, resetError: true);
     final result = await authRepository.login(
       identifier: identifier,
       password: password,
       keepSignedIn: state.keepSignedIn,
     );
-
     state = result.when(
-      success: (user) {
-        userService.cacheUser(user);
-        return state.copyWith(user: user, isLoading: false);
-      },
+      success: (user) => state.copyWith(user: user, isLoading: false),
       failure: (message) => state.copyWith(isLoading: false, error: message),
     );
   }
@@ -73,16 +72,12 @@ class AuthController extends StateNotifier<AuthState> {
     state = state.copyWith(isLoading: true, resetError: true);
     final result = await authRepository.loginTester();
     state = result.when(
-      success: (user) {
-        userService.cacheUser(user);
-        return state.copyWith(user: user, isLoading: false);
-      },
+      success: (user) => state.copyWith(user: user, isLoading: false),
       failure: (message) => state.copyWith(isLoading: false, error: message),
     );
   }
 
   void updateUser(AppUser user) {
-    userService.cacheUser(user);
     state = state.copyWith(user: user, resetError: true);
   }
 
@@ -112,10 +107,7 @@ class AuthController extends StateNotifier<AuthState> {
     state = state.copyWith(isLoading: true, resetError: true);
     final result = await authRepository.signupStep3(data);
     state = result.when(
-      success: (user) {
-        userService.cacheUser(user);
-        return state.copyWith(user: user, isLoading: false);
-      },
+      success: (user) => state.copyWith(user: user, isLoading: false),
       failure: (message) => state.copyWith(isLoading: false, error: message),
     );
   }
@@ -124,14 +116,8 @@ class AuthController extends StateNotifier<AuthState> {
     state = state.copyWith(isLoading: true, resetError: true);
     final result = await authRepository.logout();
     state = result.when(
-      success: (_) {
-        userService.clearCache();
-        return const AuthState();
-      },
+      success: (_) => const AuthState(),
       failure: (message) => state.copyWith(isLoading: false, error: message),
     );
   }
 }
-
-
-

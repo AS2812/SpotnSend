@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,6 +12,7 @@ import '../../widgets/app_button.dart';
 import '../../widgets/toasts.dart';
 import 'providers/auth_providers.dart';
 import 'widgets/auth_header.dart';
+import 'package:spotnsend/l10n/app_localizations.dart';
 
 class SignupStep3SelfiePage extends ConsumerStatefulWidget {
   const SignupStep3SelfiePage({super.key});
@@ -28,7 +29,7 @@ class _SignupStep3SelfiePageState extends ConsumerState<SignupStep3SelfiePage> {
     final status = await Permission.camera.request();
     if (!status.isGranted) {
       if (!mounted) return;
-      showErrorToast(context, 'Camera permission is required to capture a selfie.');
+      showErrorToast(context, 'Camera permission is required to capture a selfie.'.tr());
       return;
     }
 
@@ -40,7 +41,7 @@ class _SignupStep3SelfiePageState extends ConsumerState<SignupStep3SelfiePage> {
 
   Future<void> _submit() async {
     if (_selfiePath == null) {
-      showErrorToast(context, 'Please capture a selfie to continue');
+      showErrorToast(context, 'Please capture a selfie to continue'.tr());
       return;
     }
 
@@ -53,7 +54,7 @@ class _SignupStep3SelfiePageState extends ConsumerState<SignupStep3SelfiePage> {
       return;
     }
 
-    showSuccessToast(context, 'Thank you! Your account is pending verification.');
+    showSuccessToast(context, 'Thank you! Your account is pending verification.'.tr());
     context.go(RoutePaths.homeMap);
   }
 
@@ -71,9 +72,9 @@ class _SignupStep3SelfiePageState extends ConsumerState<SignupStep3SelfiePage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            const AuthGradientHeader(
-              title: 'Final step: Selfie verification',
-              subtitle: 'Capture a quick selfie so we can match it with your ID.',
+            AuthGradientHeader(
+              title: 'Final step: Selfie verification'.tr(),
+              subtitle: 'Capture a quick selfie so we can match it with your ID.'.tr(),
             ),
             Padding(
               padding: const EdgeInsets.all(24),
@@ -96,14 +97,14 @@ class _SignupStep3SelfiePageState extends ConsumerState<SignupStep3SelfiePage> {
                             children: [
                               Icon(Icons.camera_alt_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
                               const SizedBox(height: 12),
-                              Text('Tap capture to take your selfie', style: Theme.of(context).textTheme.bodyMedium),
+                              Text('Tap capture to take your selfie'.tr(), style: Theme.of(context).textTheme.bodyMedium),
                             ],
                           )
                         : null,
                   ),
                   const SizedBox(height: 20),
                   AppButton(
-                    label: _selfiePath == null ? 'Capture selfie' : 'Retake selfie',
+                    label: (_selfiePath == null ? 'Capture selfie' : 'Retake selfie').tr(),
                     onPressed: authState.isLoading ? null : _captureSelfie,
                     variant: ButtonVariant.secondary,
                   ),
@@ -111,7 +112,7 @@ class _SignupStep3SelfiePageState extends ConsumerState<SignupStep3SelfiePage> {
                   const _PendingInfoCard(),
                   const SizedBox(height: 24),
                   AppButton(
-                    label: 'Submit for verification',
+                    label: 'Submit for verification'.tr(),
                     onPressed: authState.isLoading ? null : _submit,
                     loading: authState.isLoading,
                   ),
@@ -139,17 +140,15 @@ class _PendingInfoCard extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
+        children: [
           Text(
-            'What happens next?',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+            'What happens next?'.tr(),
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
           ),
-          SizedBox(height: 8),
-          Text('Our team will verify your details shortly. You can explore reports but reporting will unlock once you are verified.'),
+          const SizedBox(height: 8),
+          Text('Our team will verify your details shortly. You can explore reports but reporting will unlock once you are verified.'.tr()),
         ],
       ),
     );
   }
 }
-
-

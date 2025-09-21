@@ -45,5 +45,11 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>This app needs access to camera to capture photos for identity verification and report submissions.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>This app needs location access to show nearby reports and incidents.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>This app needs location access to show nearby reports and incidents.</string>
 </dict>
 </plist>

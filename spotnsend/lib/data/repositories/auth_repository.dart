@@ -1,4 +1,4 @@
-import 'package:dio/dio.dart';
+﻿import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,6 +7,7 @@ import 'package:spotnsend/data/models/auth_models.dart';
 import 'package:spotnsend/data/models/user_models.dart';
 import 'package:spotnsend/data/services/api_client.dart';
 import 'package:spotnsend/data/services/token_storage.dart';
+import 'package:spotnsend/l10n/app_localizations.dart';
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   final apiClient = ref.watch(apiClientProvider);
@@ -29,7 +30,7 @@ class AuthRepository {
   }) async {
     final trimmedIdentifier = identifier.trim();
     if (trimmedIdentifier.isEmpty || password.isEmpty) {
-      return const Failure('Please provide both username/email and password.');
+      return Failure('Please provide both username/email and password.'.tr());
     }
 
     try {
@@ -57,9 +58,10 @@ class AuthRepository {
         );
       }
 
-      final userJson = (data['user'] ?? data['profile'] ?? data) as Map<String, dynamic>?;
+      final userJson =
+          (data['user'] ?? data['profile'] ?? data) as Map<String, dynamic>?;
       if (userJson == null) {
-        return const Failure('Login succeeded but no user data was returned.');
+        return Failure('Login succeeded but no user data was returned.'.tr());
       }
 
       return Success(AppUser.fromJson(userJson));
@@ -69,20 +71,22 @@ class AuthRepository {
       }
       final statusCode = error.response?.statusCode;
       if (statusCode == 400 || statusCode == 401) {
-        return const Failure('Incorrect username or password.');
+        return Failure(
+            'Invalid credentials. Please check your username or password.'
+                .tr());
       }
       return Failure(_extractMessage(error));
     } catch (error) {
       if (_canUseDemoCredentials(trimmedIdentifier, password)) {
         return Success(await _issueDemoSession());
       }
-      return const Failure('Unable to sign in. Please try again.');
+      return Failure('Unable to sign in. Please try again.'.tr());
     }
   }
 
   Future<Result<AppUser>> loginTester() async {
     if (!kDebugMode) {
-      return const Failure('Tester account is available in debug builds only.');
+      return Failure('Tester account is available in debug builds only.'.tr());
     }
     final user = await _issueDemoSession();
     return Success(user);
@@ -145,7 +149,8 @@ class AuthRepository {
       return false;
     }
     final normalized = identifier.toLowerCase();
-    return normalized == 'admin' && (password == 'admin' || password == 'admin12345');
+    return normalized == 'admin' &&
+        (password == 'admin' || password == 'admin12345');
   }
 
   Future<AppUser> _issueDemoSession() async {
@@ -171,16 +176,18 @@ class AuthRepository {
   String _extractMessage(DioException error) {
     final responseData = error.response?.data;
     if (responseData is Map<String, dynamic>) {
-      return responseData['message']?.toString() ?? responseData['error']?.toString() ?? 'Unable to sign in. Please try again.';
+      return responseData['message']?.toString() ??
+          responseData['error']?.toString() ??
+          'Invalid credentials. Please check your username or password.'.tr();
     }
-    if (error.type == DioExceptionType.connectionTimeout || error.type == DioExceptionType.connectionError) {
-      return 'Connection failed. Check your network and try again.';
+    // For connection issues during authentication, show invalid credentials instead of connection failed
+    // to avoid confusion - the user should focus on their credentials first
+    if (error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.connectionError) {
+      return 'Invalid credentials. Please check your username or password and try again.'
+          .tr();
     }
-    return error.message ?? 'Unable to sign in. Please try again.';
+    return error.message ??
+        'Invalid credentials. Please check your username or password.'.tr();
   }
 }
-
-
-
-
-

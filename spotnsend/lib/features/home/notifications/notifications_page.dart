@@ -7,6 +7,7 @@ import 'package:spotnsend/widgets/app_button.dart';
 import 'package:spotnsend/widgets/empty_state.dart';
 import 'package:spotnsend/widgets/toasts.dart';
 import 'package:spotnsend/features/home/notifications/providers/notification_providers.dart';
+import 'package:spotnsend/l10n/app_localizations.dart';
 
 class NotificationsPage extends ConsumerWidget {
   const NotificationsPage({super.key});
@@ -17,7 +18,7 @@ class NotificationsPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Notifications'),
+        title: Text('Notifications'.tr()),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
@@ -28,10 +29,10 @@ class NotificationsPage extends ConsumerWidget {
       body: state.when(
         data: (notifications) {
           if (notifications.isEmpty) {
-            return const EmptyState(
+            return EmptyState(
               icon: Icons.notifications_off_outlined,
-              title: 'No notifications yet',
-              message: 'When alerts arrive, they will show up here.',
+              title: 'No notifications yet'.tr(),
+              message: 'When alerts arrive, they will show up here.'.tr(),
             );
           }
           return ListView.separated(
@@ -44,7 +45,7 @@ class NotificationsPage extends ConsumerWidget {
             itemCount: notifications.length,
           );
         },
-        error: (error, _) => Center(child: Text('Failed to load notifications: $error')),
+        error: (error, _) => Center(child: Text('Failed to load notifications: {error}'.tr(params: {'error': '$error'}))),
         loading: () => const Center(child: CircularProgressIndicator()),
       ),
       bottomNavigationBar: SafeArea(
@@ -54,22 +55,22 @@ class NotificationsPage extends ConsumerWidget {
             children: [
               Expanded(
                 child: AppButton(
-                  label: 'Mark all read',
+                  label: 'Mark all read'.tr(),
                   variant: ButtonVariant.secondary,
                   onPressed: () async {
                     await ref.read(notificationsControllerProvider.notifier).markAll(seen: true);
-                    showSuccessToast(context, 'All notifications marked as read.');
+                    showSuccessToast(context, 'All notifications marked as read.'.tr());
                   },
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: AppButton(
-                  label: 'Clear all',
+                  label: 'Clear all'.tr(),
                   variant: ButtonVariant.secondary,
                   onPressed: () async {
                     await ref.read(notificationsControllerProvider.notifier).deleteAll();
-                    showSuccessToast(context, 'Notifications cleared.');
+                    showSuccessToast(context, 'Notifications cleared.'.tr());
                   },
                 ),
               ),
@@ -119,7 +120,7 @@ class _NotificationTile extends ConsumerWidget {
                 icon: const Icon(Icons.delete_outline_rounded),
                 onPressed: () async {
                   await ref.read(notificationsControllerProvider.notifier).delete(notification.id);
-                  showSuccessToast(context, 'Notification removed.');
+                  showSuccessToast(context, 'Notification removed.'.tr());
                 },
               ),
             ],
@@ -132,7 +133,7 @@ class _NotificationTile extends ConsumerWidget {
               TextButton.icon(
                 onPressed: () => ref.read(notificationsControllerProvider.notifier).markRead(notification.id, seen: !notification.seen),
                 icon: Icon(notification.seen ? Icons.markunread_rounded : Icons.check_circle_outline),
-                label: Text(notification.seen ? 'Mark unread' : 'Mark read'),
+                label: Text(notification.seen ? 'Mark unread'.tr() : 'Mark read'.tr()),
               ),
             ],
           ),
@@ -141,7 +142,3 @@ class _NotificationTile extends ConsumerWidget {
     );
   }
 }
-
-
-
-

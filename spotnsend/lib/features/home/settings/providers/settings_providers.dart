@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 import 'package:spotnsend/data/models/settings_models.dart';
 import 'package:spotnsend/data/services/settings_service.dart';
 
-final settingsControllerProvider = StateNotifierProvider<SettingsController, SettingsState>((ref) {
-  final service = ref.watch(settingsServiceProvider);
-  return SettingsController(service)..load();
+final settingsControllerProvider =
+    NotifierProvider<SettingsController, SettingsState>(() {
+  return SettingsController();
 });
 
 class SettingsState {
@@ -37,21 +36,25 @@ class SettingsState {
   }
 }
 
-class SettingsController extends StateNotifier<SettingsState> {
-  SettingsController(this.service)
-      : super(SettingsState(
-          settings: const AppSettings(
-            notificationsOn: true,
-            twoFactorEnabled: false,
-            language: AppLanguage.english,
-            themeMode: AppThemeMode.system,
-            contactEmail: 'support@spotnsend.com',
-            appVersion: 'v1.0.0',
-          ),
-          isLoading: true,
-        ));
+class SettingsController extends Notifier<SettingsState> {
+  late SettingsService service;
 
-  final SettingsService service;
+  @override
+  SettingsState build() {
+    service = ref.watch(settingsServiceProvider);
+    load();
+    return const SettingsState(
+      settings: AppSettings(
+        notificationsOn: true,
+        twoFactorEnabled: false,
+        language: AppLanguage.english,
+        themeMode: AppThemeMode.system,
+        contactEmail: 'support@spotnsend.com',
+        appVersion: 'v1.0.0',
+      ),
+      isLoading: true,
+    );
+  }
 
   Future<void> load() async {
     final settings = await service.get();
@@ -82,10 +85,3 @@ class SettingsController extends StateNotifier<SettingsState> {
     await service.update(updated);
   }
 }
-
-
-
-
-
-
-

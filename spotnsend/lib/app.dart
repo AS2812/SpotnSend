@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/router/app_router.dart';
 import 'core/theme/theme.dart';
 import 'features/home/settings/providers/settings_providers.dart';
+import 'l10n/app_localizations.dart';
 
 class SpotnSendApp extends ConsumerWidget {
   const SpotnSendApp({super.key});
@@ -21,11 +22,9 @@ class SpotnSendApp extends ConsumerWidget {
       darkTheme: AppTheme.dark,
       themeMode: settingsState.themeMode,
       locale: settingsState.locale,
-      supportedLocales: const [
-        Locale('en'),
-        Locale('ar'),
-      ],
+      supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: const [
+        AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
@@ -34,5 +33,3 @@ class SpotnSendApp extends ConsumerWidget {
     );
   }
 }
-
-
