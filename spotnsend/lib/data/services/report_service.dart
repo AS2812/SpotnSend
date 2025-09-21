@@ -42,10 +42,10 @@ class ReportService {
           .whereType<Map<String, dynamic>>()
           .map(Report.fromJson)
           .toList(growable: false);
-    } on DioException catch (error) {
+    } on DioException {
       // Return empty list instead of throwing to prevent UI crashes
       return const [];
-    } catch (error) {
+    } catch (_) {
       // Return empty list for any other errors (including permission issues)
       return const [];
     }

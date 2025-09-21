@@ -18,6 +18,11 @@ final selectedCategoryProvider = Provider<ReportCategory?>((ref) {
   return categories.first;
 });
 
+final reportSubcategoriesProvider = Provider<List<ReportSubcategory>>((ref) {
+  final selectedCategory = ref.watch(selectedCategoryProvider);
+  return selectedCategory?.subcategories ?? [];
+});
+
 final reportFormProvider =
     NotifierProvider<ReportFormNotifier, ReportFormData>(() {
   return ReportFormNotifier();

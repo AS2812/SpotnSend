@@ -26,6 +26,8 @@ class _MapPageState extends ConsumerState<MapPage> {
   final Map<String, Report> _reportBySymbol = {};
   LatLng _initialCenter = const LatLng(24.7136, 46.6753);
   final double _initialZoom = 12;
+  Circle? _radiusCircle;
+  LatLng? _userLocation;
 
   @override
   void initState() {
@@ -34,11 +36,17 @@ class _MapPageState extends ConsumerState<MapPage> {
       ref.listen<AsyncValue<LocationData?>>(currentLocationProvider,
           (previous, next) {
         next.whenOrNull(data: (data) {
-          if (data != null && _controller != null) {
+          if (data != null) {
             final target = LatLng(data.latitude ?? _initialCenter.latitude,
                 data.longitude ?? _initialCenter.longitude);
             _initialCenter = target;
-            _controller!.animateCamera(CameraUpdate.newLatLng(target));
+            _userLocation = target;
+
+            // Auto-center map to user location when opened
+            if (_controller != null) {
+              _controller!.animateCamera(CameraUpdate.newLatLng(target));
+              _updateRadiusCircle();
+            }
           }
         });
       });
@@ -46,6 +54,13 @@ class _MapPageState extends ConsumerState<MapPage> {
       ref.listen<AsyncValue<List<Report>>>(nearbyReportsProvider,
           (previous, next) {
         next.whenOrNull(data: (reports) => _syncMarkers(reports));
+      });
+
+      // Listen to radius changes to update circle
+      ref.listen<ReportFilters>(mapFiltersProvider, (previous, next) {
+        if (previous?.radiusKm != next.radiusKm) {
+          _updateRadiusCircle();
+        }
       });
     });
   }
@@ -67,6 +82,29 @@ class _MapPageState extends ConsumerState<MapPage> {
       );
       _reportBySymbol[symbol.id] = report;
     }
+  }
+
+  Future<void> _updateRadiusCircle() async {
+    if (_controller == null || _userLocation == null) return;
+
+    // Remove existing circle
+    if (_radiusCircle != null) {
+      await _controller!.removeCircle(_radiusCircle!);
+    }
+
+    // Add new circle with current radius
+    final filters = ref.read(mapFiltersProvider);
+    _radiusCircle = await _controller!.addCircle(
+      CircleOptions(
+        geometry: _userLocation!,
+        circleRadius: filters.radiusKm * 1000, // Convert km to meters
+        circleColor: '#2196F3',
+        circleOpacity: 0.2,
+        circleStrokeColor: '#2196F3',
+        circleStrokeWidth: 2,
+        circleStrokeOpacity: 0.8,
+      ),
+    );
   }
 
   void _openReportDetails(Report report) {
@@ -98,12 +136,23 @@ class _MapPageState extends ConsumerState<MapPage> {
               myLocationEnabled: permissionAsync.value ?? false,
               compassEnabled: true,
               trackCameraPosition: true,
-              onMapCreated: (controller) {
+              onMapCreated: (controller) async {
                 _controller = controller;
                 controller.onSymbolTapped.add((symbol) {
                   final report = _reportBySymbol[symbol.id];
                   if (report != null) {
                     _openReportDetails(report);
+                  }
+                });
+
+                // Center to user location when map is created
+                final locationAsync = ref.read(currentLocationProvider);
+                locationAsync.whenData((data) {
+                  if (data != null) {
+                    final target = LatLng(data.latitude!, data.longitude!);
+                    _userLocation = target;
+                    controller.animateCamera(CameraUpdate.newLatLng(target));
+                    _updateRadiusCircle();
                   }
                 });
               },

@@ -7,7 +7,6 @@ import '../../core/router/routes.dart';
 import '../../core/utils/validators.dart';
 import '../../widgets/app_button.dart';
 import '../../widgets/app_text_field.dart';
-import '../../widgets/back_footer_button.dart';
 import 'providers/auth_providers.dart';
 import 'widgets/auth_header.dart';
 import 'package:spotnsend/l10n/app_localizations.dart';
@@ -171,7 +170,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           ],
         ),
       ),
-      bottomNavigationBar: const BackFooterButton(),
     );
   }
 }

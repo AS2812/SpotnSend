@@ -282,7 +282,9 @@ class AppLocalizations {
       'Include saved spots': 'تضمين المواقع المحفوظة',
       'Arabic Language': 'اللغة العربية',
       'Using Arabic interface': 'استخدام الواجهة العربية',
-      'Using English interface': 'استخدام الواجهة الإنجليزية'
+      'Using English interface': 'استخدام الواجهة الإنجليزية',
+      'Logout': 'تسجيل الخروج',
+      'Are you sure you want to logout?': 'هل أنت متأكد من تسجيل الخروج؟'
     }
   };
 

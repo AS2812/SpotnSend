@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:spotnsend/data/models/settings_models.dart';
+import 'package:spotnsend/features/auth/providers/auth_providers.dart';
 import 'package:spotnsend/widgets/toasts.dart';
 import 'package:spotnsend/features/home/settings/providers/settings_providers.dart';
 import 'package:spotnsend/l10n/app_localizations.dart';
@@ -62,27 +63,42 @@ class SettingsPage extends ConsumerWidget {
               showSuccessToast(context, 'Language updated.'.tr());
             },
           ),
-          ListTile(
-            title: Text('Theme'.tr()),
-            subtitle: Text(_getThemeModeDisplayName(settings.themeMode)),
-            trailing: SegmentedButton<AppThemeMode>(
-              segments: [
-                ButtonSegment(
-                    value: AppThemeMode.light,
-                    icon: const Icon(Icons.light_mode_rounded),
-                    label: Text('Light'.tr())),
-                ButtonSegment(
-                    value: AppThemeMode.dark,
-                    icon: const Icon(Icons.dark_mode_rounded),
-                    label: Text('Dark'.tr())),
-                ButtonSegment(
-                    value: AppThemeMode.system,
-                    icon: const Icon(Icons.phone_iphone_rounded),
-                    label: Text('System'.tr())),
-              ],
-              selected: <AppThemeMode>{settings.themeMode},
-              onSelectionChanged: (selection) =>
-                  controller.updateThemeMode(selection.first),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.palette_outlined),
+                      const SizedBox(width: 12),
+                      Text('Theme'.tr(),
+                          style: Theme.of(context).textTheme.titleMedium),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  SegmentedButton<AppThemeMode>(
+                    segments: [
+                      ButtonSegment(
+                          value: AppThemeMode.light,
+                          icon: const Icon(Icons.light_mode_rounded),
+                          label: Text('Light'.tr())),
+                      ButtonSegment(
+                          value: AppThemeMode.dark,
+                          icon: const Icon(Icons.dark_mode_rounded),
+                          label: Text('Dark'.tr())),
+                      ButtonSegment(
+                          value: AppThemeMode.system,
+                          icon: const Icon(Icons.phone_iphone_rounded),
+                          label: Text('System'.tr())),
+                    ],
+                    selected: <AppThemeMode>{settings.themeMode},
+                    onSelectionChanged: (selection) =>
+                        controller.updateThemeMode(selection.first),
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 24),
@@ -117,20 +133,41 @@ class SettingsPage extends ConsumerWidget {
                 context, 'Terms & Conditions screen placeholder.'.tr()),
           ),
           const SizedBox(height: 24),
+          ListTile(
+            leading: const Icon(Icons.logout_rounded, color: Colors.red),
+            title:
+                Text('Logout'.tr(), style: const TextStyle(color: Colors.red)),
+            onTap: () => _showLogoutDialog(context, ref),
+          ),
+          const SizedBox(height: 24),
           Center(child: Text('App version '.tr() + settings.appVersion)),
         ],
       ),
     );
   }
 
-  String _getThemeModeDisplayName(AppThemeMode mode) {
-    switch (mode) {
-      case AppThemeMode.light:
-        return 'Light'.tr();
-      case AppThemeMode.dark:
-        return 'Dark'.tr();
-      case AppThemeMode.system:
-        return 'System'.tr();
+  Future<void> _showLogoutDialog(BuildContext context, WidgetRef ref) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Logout'.tr()),
+        content: Text('Are you sure you want to logout?'.tr()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text('Cancel'.tr()),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: Text('Logout'.tr()),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true) {
+      await ref.read(authControllerProvider.notifier).logout();
     }
   }
 }

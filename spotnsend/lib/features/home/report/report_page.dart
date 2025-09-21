@@ -88,8 +88,7 @@ class _ReportPageState extends ConsumerState<ReportPage> {
 
     final formState = ref.watch(reportFormProvider);
     final categories = ref.watch(reportCategoriesProvider);
-    final subcategories =
-        <ReportSubcategory>[]; // Empty for now - implement subcategories if needed
+    final subcategories = ref.watch(reportSubcategoriesProvider);
 
     return Scaffold(
       appBar: AppBar(title: Text('Submit a report'.tr())),

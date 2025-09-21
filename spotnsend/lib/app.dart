@@ -30,6 +30,15 @@ class SpotnSendApp extends ConsumerWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       routerConfig: router,
+      // Fix yellow text during locale transition
+      builder: (context, child) {
+        return Directionality(
+          textDirection: settingsState.locale.languageCode == 'ar'
+              ? TextDirection.rtl
+              : TextDirection.ltr,
+          child: child ?? const SizedBox(),
+        );
+      },
     );
   }
 }
