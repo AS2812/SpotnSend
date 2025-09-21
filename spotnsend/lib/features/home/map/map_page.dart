@@ -166,10 +166,15 @@ class _MapPageState extends ConsumerState<MapPage> {
             child: MaplibreMap(
               styleString: mapStyleUrl,
               initialCameraPosition: CameraPosition(
-                  target: _userLocation ?? _initialCenter, zoom: _initialZoom),
+                  target: _userLocation ?? _initialCenter,
+                  zoom: 16), // Always use high zoom for user location
               myLocationEnabled: permissionAsync.value ?? false,
-              myLocationTrackingMode: MyLocationTrackingMode.tracking,
-              myLocationRenderMode: MyLocationRenderMode.gps,
+              myLocationTrackingMode: permissionAsync.value == true
+                  ? MyLocationTrackingMode.tracking
+                  : MyLocationTrackingMode.none,
+              myLocationRenderMode: permissionAsync.value == true
+                  ? MyLocationRenderMode.gps
+                  : MyLocationRenderMode.normal,
               compassEnabled: true,
               trackCameraPosition: true,
               onMapCreated: (controller) async {
