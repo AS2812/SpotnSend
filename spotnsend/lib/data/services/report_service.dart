@@ -1,78 +1,103 @@
-import 'dart:async';
-import 'dart:convert';
-import 'dart:math';
+import 'dart:io';
 
-import 'package:flutter/services.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:spotnsend/core/utils/result.dart';
 import 'package:spotnsend/data/models/report_models.dart';
 import 'package:spotnsend/data/models/user_models.dart';
+import 'package:spotnsend/data/services/api_client.dart';
 
 final reportServiceProvider = Provider<ReportService>((ref) {
-  return ReportService();
+  final client = ref.watch(apiClientProvider);
+  return ReportService(client.dio);
 });
 
 class ReportService {
+  ReportService(this._dio);
+
+  final Dio _dio;
+
   Future<List<Report>> fetchNearby({
     required double lat,
     required double lng,
     required double radiusKm,
-    required Set<String> categories,
+    required Set<int> categoryIds,
   }) async {
-    final data = await _loadReports();
-    final filtered = data.where((report) {
-      final distance = _distanceInKm(lat, lng, report.lat, report.lng);
-      final withinRadius = distance <= radiusKm;
-      final matchesCategory = categories.isEmpty || categories.contains(report.category);
-      return withinRadius && matchesCategory;
-    }).toList();
-
-    filtered.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    return filtered.take(20).toList();
+    try {
+      final response = await _dio.get<List<dynamic>>(
+        '/reports/nearby',
+        queryParameters: {
+          'latitude': lat,
+          'longitude': lng,
+          'radius': (radiusKm * 1000).round(),
+          if (categoryIds.isNotEmpty) 'categories': categoryIds.join(','),
+          'limit': 50,
+          'offset': 0,
+        },
+      );
+      final data = response.data ?? const [];
+      return data
+          .whereType<Map<String, dynamic>>()
+          .map(Report.fromJson)
+          .toList(growable: false);
+    } on DioException catch (error) {
+      throw Exception(_extractMessage(error));
+    }
   }
 
   Future<Result<Report>> submit({
     required ReportFormData formData,
     required AppUser user,
   }) async {
-    await Future<void>.delayed(const Duration(seconds: 1));
-
     if (!formData.agreedToTerms) {
       return const Failure('You must agree to the terms to continue');
     }
 
-    if (formData.category == null || formData.subcategory == null) {
+    if (formData.categoryId == null) {
       return const Failure('Please choose a category');
     }
 
-    final fallbackLat = 24.7136;
-    final fallbackLng = 46.6753;
+    final fallbackSpot = user.savedSpots.isNotEmpty ? user.savedSpots.first : null;
+    final latitude = formData.selectedLat ?? fallbackSpot?.lat ?? 24.7136;
+    final longitude = formData.selectedLng ?? fallbackSpot?.lng ?? 46.6753;
 
-    final created = Report(
-      id: 'rpt-${DateTime.now().millisecondsSinceEpoch}',
-      categoryId: formData.categoryId ?? 0,
-      categoryName: formData.category ?? 'General',
-      subcategoryId: formData.subcategoryId,
-      subcategoryName: formData.subcategory,
-      description: formData.description,
-      media: formData.mediaPaths.isEmpty
-          ? null
-          : formData.mediaPaths.map((path) => ReportMedia(url: path)).toList(),
-      lat: formData.selectedLat ?? fallbackLat,
-      lng: formData.selectedLng ?? fallbackLng,
-      status: ReportStatus.submitted,
-      priority: formData.priority ?? ReportPriority.normal,
-      createdAt: DateTime.now().toUtc(),
-    );
+    final payload = {
+      'categoryId': formData.categoryId,
+      if (formData.subcategoryId != null) 'subcategoryId': formData.subcategoryId,
+      'description': formData.description.trim(),
+      'latitude': latitude,
+      'longitude': longitude,
+      'alertRadiusMeters': (formData.radiusKm * 1000).round(),
+      'notifyScope': _audienceToString(formData.notifyScope ?? formData.audience),
+      'priority': (formData.priority ?? ReportPriority.normal).name,
+    };
 
-    return Success(created);
-  }
+    try {
+      final hasMedia = formData.mediaPaths.isNotEmpty;
+      Response<dynamic> response;
+      if (hasMedia) {
+        final mediaFiles = <MultipartFile>[];
+        for (final path in formData.mediaPaths) {
+          if (path.isEmpty) continue;
+          mediaFiles.add(await MultipartFile.fromFile(path, filename: path.split(Platform.pathSeparator).last));
+        }
+        final formDataBody = FormData.fromMap({
+          ...payload,
+          if (mediaFiles.isNotEmpty) 'mediaFiles': mediaFiles,
+        });
+        response = await _dio.post('/reports', data: formDataBody);
+      } else {
+        response = await _dio.post('/reports', data: payload);
+      }
 
-  Future<List<Report>> _loadReports() async {
-    final raw = await rootBundle.loadString('fixtures/reports.json');
-    final List<dynamic> jsonList = jsonDecode(raw) as List<dynamic>;
-    return jsonList.map((item) => Report.fromJson(item as Map<String, dynamic>)).toList();
+      final data = response.data as Map<String, dynamic>;
+      return Success(Report.fromJson(data));
+    } on DioException catch (error) {
+      return Failure(_extractMessage(error));
+    } catch (error) {
+      return Failure(error.toString());
+    }
   }
 
   List<ReportCategory> get categories => const [
@@ -132,17 +157,22 @@ class ReportService {
         ),
       ];
 
-  double _distanceInKm(double lat1, double lon1, double lat2, double lon2) {
-    const earthRadiusKm = 6371.0;
-    final dLat = _degreesToRadians(lat2 - lat1);
-    final dLon = _degreesToRadians(lon2 - lon1);
-
-    final a = sin(dLat / 2) * sin(dLat / 2) + cos(_degreesToRadians(lat1)) * cos(_degreesToRadians(lat2)) * sin(dLon / 2) * sin(dLon / 2);
-    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
-    return earthRadiusKm * c;
+  String _extractMessage(DioException error) {
+    final responseData = error.response?.data;
+    if (responseData is Map<String, dynamic>) {
+      return responseData['message']?.toString() ?? responseData['error']?.toString() ?? 'Unexpected error occurred.';
+    }
+    return error.message ?? 'Unexpected error occurred.';
   }
 
-  double _degreesToRadians(double degrees) => degrees * (pi / 180);
+  String _audienceToString(ReportAudience audience) {
+    switch (audience) {
+      case ReportAudience.people:
+        return 'people';
+      case ReportAudience.government:
+        return 'government';
+      case ReportAudience.both:
+        return 'both';
+    }
+  }
 }
-
-

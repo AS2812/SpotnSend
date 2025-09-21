@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 import 'package:spotnsend/core/utils/result.dart';
 import 'package:spotnsend/data/models/report_models.dart';
@@ -12,7 +11,16 @@ final reportCategoriesProvider = Provider<List<ReportCategory>>((ref) {
   return service.categories;
 });
 
-final selectedCategoryProvider = Provider<String?>((ref) => ref.watch(reportFormProvider).category);
+final selectedCategoryProvider = Provider<ReportCategory?>((ref) {
+  final form = ref.watch(reportFormProvider);
+  final categories = ref.watch(reportCategoriesProvider);
+  for (final category in categories) {
+    if (category.id == form.categoryId) {
+      return category;
+    }
+  }
+  return null;
+});
 
 final reportFormProvider = StateNotifierProvider<ReportFormNotifier, ReportFormData>((ref) {
   return ReportFormNotifier(ref);
@@ -23,12 +31,20 @@ class ReportFormNotifier extends StateNotifier<ReportFormData> {
 
   final Ref ref;
 
-  void updateCategory(String? category) {
-    state = state.copyWith(categoryName: category, subcategoryId: null, subcategoryName: null);
+  void updateCategory(ReportCategory? category) {
+    state = state.copyWith(
+      categoryId: category?.id,
+      categoryName: category?.name,
+      subcategoryId: null,
+      subcategoryName: null,
+    );
   }
 
-  void updateSubcategory(String? subcategory) {
-    state = state.copyWith(subcategoryName: subcategory);
+  void updateSubcategory(ReportSubcategory? subcategory) {
+    state = state.copyWith(
+      subcategoryId: subcategory?.id,
+      subcategoryName: subcategory?.name,
+    );
   }
 
   void updateDescription(String description) {
@@ -74,17 +90,10 @@ class ReportFormNotifier extends StateNotifier<ReportFormData> {
   }
 }
 
-final reportSubcategoriesProvider = Provider<List<String>>((ref) {
+final reportSubcategoriesProvider = Provider<List<ReportSubcategory>>((ref) {
   final category = ref.watch(selectedCategoryProvider);
-  final categories = ref.watch(reportCategoriesProvider);
-  final match = categories.where((element) => element.name == category);
-  if (match.isEmpty) {
+  if (category == null) {
     return const [];
   }
-  return match.first.subcategories.map((item) => item.name).toList();
+  return category.subcategories;
 });
-
-
-
-
-

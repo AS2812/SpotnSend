@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:location/location.dart';
@@ -164,7 +164,7 @@ class _MapPageState extends ConsumerState<MapPage> {
               child: const Icon(Icons.my_location_rounded),
             ),
           ),
-          if (reportsAsync.isLoading)
+          if (reportsAsync.isLoading && !reportsAsync.hasValue)
             const _LoadingOverlay(message: 'Loading nearby reports...'),
           if (missingKey)
             const _MissingKeyNotice(),
@@ -191,22 +191,41 @@ class _RadiusSelector extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    const options = [1.0, 3.0, 5.0, 10.0, 20.0];
-    return SizedBox(
-      height: 48,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemBuilder: (context, index) {
-          final value = options[index];
-          final isActive = value == selectedRadius;
-          return ChoiceChip(
-            label: Text(' km'),
-            selected: isActive,
-            onSelected: (_) => ref.read(mapFiltersProvider.notifier).setRadius(value),
-          );
-        },
-        separatorBuilder: (_, __) => const SizedBox(width: 12),
-        itemCount: options.length,
+    final theme = Theme.of(context);
+    final displayValue = selectedRadius.clamp(1, 20);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withOpacity(0.92),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 20, offset: const Offset(0, 10)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('Search radius', style: theme.textTheme.labelLarge),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Slider.adaptive(
+                  min: 1,
+                  max: 20,
+                  divisions: 19,
+                  value: displayValue.toDouble(),
+                  label: '${displayValue.round()} km',
+                  onChanged: (value) => ref.read(mapFiltersProvider.notifier).setRadius(value),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text('${displayValue.round()} km', style: theme.textTheme.titleMedium),
+            ],
+          ),
+        ],
       ),
     );
   }

@@ -88,25 +88,39 @@ class _ReportPageState extends ConsumerState<ReportPage> {
         child: ListView(
           padding: const EdgeInsets.all(24),
           children: [
-            DropdownButtonFormField<String>(
+            DropdownButtonFormField<int>(
               decoration: const InputDecoration(labelText: 'Category'),
-              value: formState.category,
+              value: formState.categoryId,
               items: [
                 for (final category in categories)
-                  DropdownMenuItem(value: category.name, child: Text(category.name)),
+                  DropdownMenuItem<int>(value: category.id, child: Text(category.name)),
               ],
-              onChanged: (value) => ref.read(reportFormProvider.notifier).updateCategory(value),
+              onChanged: (value) {
+                if (value == null) {
+                  ref.read(reportFormProvider.notifier).updateCategory(null);
+                  return;
+                }
+                final selected = categories.firstWhere((category) => category.id == value);
+                ref.read(reportFormProvider.notifier).updateCategory(selected);
+              },
               validator: (value) => value == null ? 'Select a category' : null,
             ),
             const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
+            DropdownButtonFormField<int>(
               decoration: const InputDecoration(labelText: 'Sub-category'),
-              value: formState.subcategory,
+              value: formState.subcategoryId,
               items: [
                 for (final subcategory in subcategories)
-                  DropdownMenuItem(value: subcategory, child: Text(subcategory)),
+                  DropdownMenuItem<int>(value: subcategory.id, child: Text(subcategory.name)),
               ],
-              onChanged: (value) => ref.read(reportFormProvider.notifier).updateSubcategory(value),
+              onChanged: (value) {
+                if (value == null) {
+                  ref.read(reportFormProvider.notifier).updateSubcategory(null);
+                  return;
+                }
+                final selected = subcategories.firstWhere((subcategory) => subcategory.id == value);
+                ref.read(reportFormProvider.notifier).updateSubcategory(selected);
+              },
               validator: (value) => value == null ? 'Select a sub-category' : null,
             ),
             const SizedBox(height: 16),
@@ -126,7 +140,7 @@ class _ReportPageState extends ConsumerState<ReportPage> {
               title: const Text('Add photos or videos'),
               subtitle: Text(formState.mediaPaths.isEmpty
                   ? 'Optional evidence helps responders assess severity.'
-                  : ' attachment(s) selected'),
+                  : '${formState.mediaPaths.length} attachment(s) selected'),
               trailing: IconButton(
                 icon: const Icon(Icons.add_a_photo_rounded),
                 onPressed: _pickMedia,

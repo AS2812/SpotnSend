@@ -2,6 +2,28 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+<<<<<<< HEAD
+import 'package:flutter_riverpod/legacy.dart';
+
+final apiClientProvider = Provider<ApiClient>((ref) {
+  return ApiClient();
+});
+
+class ApiClient {
+  ApiClient()
+      : dio = Dio(
+          BaseOptions(
+            baseUrl: 'https://api.spotnsend.dev',
+            connectTimeout: const Duration(seconds: 10),
+            receiveTimeout: const Duration(seconds: 15),
+            headers: {'Content-Type': 'application/json'},
+          ),
+        );
+
+  final Dio dio;
+}
+
+=======
 
 import 'package:spotnsend/core/config/app_config.dart';
 import 'package:spotnsend/data/services/token_storage.dart';
@@ -155,4 +177,8 @@ class ApiClient {
     });
   }
 }
+<<<<<<< HEAD
 
+=======
+>>>>>>> 3f1d5939b69ebb53fd7acf28c8557f4585162768
+>>>>>>> 12476f4562425887d3e031348f0a8cc3344211f0

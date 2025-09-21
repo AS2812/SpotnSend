@@ -1,11 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 import 'package:location/location.dart';
 
 import 'package:spotnsend/data/models/report_models.dart';
 import 'package:spotnsend/data/services/maptiler_service.dart';
 import 'package:spotnsend/data/services/report_service.dart';
-import 'package:spotnsend/features/auth/providers/auth_providers.dart';
 
 final locationServiceProvider = Provider<Location>((ref) => Location());
 
@@ -44,24 +42,25 @@ class MapFiltersNotifier extends StateNotifier<ReportFilters> {
   MapFiltersNotifier()
       : super(const ReportFilters(
           radiusKm: 3,
-          categories: {},
+          categoryIds: <int>{},
           includeSavedSpots: true,
         ));
 
   void setRadius(double radius) {
-    state = state.copyWith(radiusKm: radius);
+    final clamped = radius.clamp(1, 20);
+    state = state.copyWith(radiusKm: clamped.toDouble());
   }
 
-  void toggleCategory(String category) {
-    final updated = Set<String>.from(state.categories);
-    if (!updated.add(category)) {
-      updated.remove(category);
+  void toggleCategory(int categoryId) {
+    final updated = Set<int>.from(state.categoryIds);
+    if (!updated.add(categoryId)) {
+      updated.remove(categoryId);
     }
-    state = state.copyWith(categories: updated);
+    state = state.copyWith(categoryIds: updated);
   }
 
   void clearCategories() {
-    state = state.copyWith(categories: {});
+    state = state.copyWith(categoryIds: <int>{});
   }
 
   void toggleSavedSpots(bool enabled) {
@@ -82,8 +81,8 @@ final nearbyReportsProvider = FutureProvider.autoDispose<List<Report>>((ref) asy
   final reportService = ref.watch(reportServiceProvider);
   final filters = ref.watch(mapFiltersProvider);
   final locationData = await ref.watch(currentLocationProvider.future);
-  final fallbackLat = 24.7136;
-  final fallbackLng = 46.6753;
+  const fallbackLat = 24.7136;
+  const fallbackLng = 46.6753;
   final lat = locationData?.latitude ?? fallbackLat;
   final lng = locationData?.longitude ?? fallbackLng;
 
@@ -91,13 +90,6 @@ final nearbyReportsProvider = FutureProvider.autoDispose<List<Report>>((ref) asy
     lat: lat,
     lng: lng,
     radiusKm: filters.radiusKm,
-    categories: filters.categories,
+    categoryIds: filters.categoryIds,
   );
 });
-
-
-
-
-
-
-

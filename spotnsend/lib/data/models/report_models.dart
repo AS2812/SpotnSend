@@ -183,22 +183,22 @@ class ReportFormData {
 class ReportFilters {
   const ReportFilters({
     required this.radiusKm,
-    required this.categories,
+    required this.categoryIds,
     required this.includeSavedSpots,
   });
 
   final double radiusKm;
-  final Set<String> categories;
+  final Set<int> categoryIds;
   final bool includeSavedSpots;
 
   ReportFilters copyWith({
     double? radiusKm,
-    Set<String>? categories,
+    Set<int>? categoryIds,
     bool? includeSavedSpots,
   }) {
     return ReportFilters(
       radiusKm: radiusKm ?? this.radiusKm,
-      categories: categories ?? this.categories,
+      categoryIds: categoryIds ?? this.categoryIds,
       includeSavedSpots: includeSavedSpots ?? this.includeSavedSpots,
     );
   }

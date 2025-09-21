@@ -52,8 +52,8 @@ class MapFiltersSheet extends ConsumerWidget {
               for (final category in reportService.categories)
                 FilterChip(
                   label: Text(category.name),
-                  selected: filters.categories.contains(category.name),
-                  onSelected: (_) => ref.read(mapFiltersProvider.notifier).toggleCategory(category.name),
+                  selected: filters.categoryIds.contains(category.id),
+                  onSelected: (_) => ref.read(mapFiltersProvider.notifier).toggleCategory(category.id),
                 ),
             ],
           ),
