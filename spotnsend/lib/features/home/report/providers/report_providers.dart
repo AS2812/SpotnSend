@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import 'package:spotnsend/core/utils/result.dart';
 import 'package:spotnsend/data/models/report_models.dart';

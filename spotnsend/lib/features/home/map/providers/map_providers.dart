@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:location/location.dart';
 
 import 'package:spotnsend/data/models/report_models.dart';

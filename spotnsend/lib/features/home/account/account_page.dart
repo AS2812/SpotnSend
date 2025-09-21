@@ -1,12 +1,10 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:spotnsend/core/utils/formatters.dart';
-import 'package:spotnsend/data/models/user_models.dart';
 import 'package:spotnsend/widgets/app_badge.dart';
 import 'package:spotnsend/widgets/app_button.dart';
 import 'package:spotnsend/widgets/toasts.dart';
-import 'package:spotnsend/features/auth/providers/auth_providers.dart';
 import 'package:spotnsend/features/home/account/providers/account_providers.dart';
 
 class AccountPage extends ConsumerWidget {
