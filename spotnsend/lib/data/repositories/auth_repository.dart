@@ -67,12 +67,16 @@ class AuthRepository {
       if (_canUseDemoCredentials(trimmedIdentifier, password)) {
         return Success(await _issueDemoSession());
       }
+      final statusCode = error.response?.statusCode;
+      if (statusCode == 400 || statusCode == 401) {
+        return const Failure('Incorrect username or password.');
+      }
       return Failure(_extractMessage(error));
     } catch (error) {
       if (_canUseDemoCredentials(trimmedIdentifier, password)) {
         return Success(await _issueDemoSession());
       }
-      return Failure(error.toString());
+      return const Failure('Unable to sign in. Please try again.');
     }
   }
 
@@ -175,6 +179,7 @@ class AuthRepository {
     return error.message ?? 'Unable to sign in. Please try again.';
   }
 }
+
 
 
 

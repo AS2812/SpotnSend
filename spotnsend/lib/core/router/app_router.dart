@@ -32,6 +32,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     redirect: notifier.redirect,
     routes: [
       GoRoute(
+        path: '/',
+        redirect: (_, __) => RoutePaths.login,
+      ),
+      GoRoute(
         path: RoutePaths.login,
         name: AppRoute.login.name,
         builder: (context, state) => const LoginPage(),
@@ -51,13 +55,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         name: AppRoute.signupStep3.name,
         builder: (context, state) => const SignupStep3SelfiePage(),
       ),
+      GoRoute(
+        path: RoutePaths.home,
+        redirect: (_, __) => RoutePaths.homeMap,
+      ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => HomeShell(navigationShell: navigationShell),
         branches: [
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: 'map',
+                path: RoutePaths.homeMap,
                 name: AppRoute.homeMap.name,
                 builder: (context, state) => const MapPage(),
                 routes: [
@@ -74,7 +82,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: 'report',
+                path: RoutePaths.homeReport,
                 name: AppRoute.homeReport.name,
                 builder: (context, state) => const ReportPage(),
               ),
@@ -83,7 +91,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: 'notifications',
+                path: RoutePaths.homeNotifications,
                 name: AppRoute.homeNotifications.name,
                 builder: (context, state) => const NotificationsPage(),
               ),
@@ -92,7 +100,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: 'account',
+                path: RoutePaths.homeAccount,
                 name: AppRoute.homeAccount.name,
                 builder: (context, state) => const AccountPage(),
               ),
@@ -101,7 +109,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: 'settings',
+                path: RoutePaths.homeSettings,
                 name: AppRoute.homeSettings.name,
                 builder: (context, state) => const SettingsPage(),
               ),
@@ -122,18 +130,22 @@ class RouterNotifier extends ChangeNotifier {
 
   String? redirect(BuildContext context, GoRouterState state) {
     final authState = ref.read(authControllerProvider);
-    final location = state.uri.toString();
-
+    final location = state.uri.path;
     final isGoingToAuth = location == RoutePaths.login ||
         location == RoutePaths.signupStep1 ||
         location == RoutePaths.signupStep2 ||
-        location == RoutePaths.signupStep3;
+        location == RoutePaths.signupStep3 ||
+        location == '/';
 
     if (!authState.isAuthenticated) {
       if (isGoingToAuth) {
         return null;
       }
       return RoutePaths.login;
+    }
+
+    if (location == '/' || location == RoutePaths.home) {
+      return RoutePaths.homeMap;
     }
 
     if (authState.isAuthenticated && isGoingToAuth) {
