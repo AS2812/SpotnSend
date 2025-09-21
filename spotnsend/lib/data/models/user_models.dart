@@ -1,4 +1,4 @@
-﻿enum VerificationStatus { pending, verified }
+enum VerificationStatus { pending, verified }
 
 class AppUser {
   const AppUser({

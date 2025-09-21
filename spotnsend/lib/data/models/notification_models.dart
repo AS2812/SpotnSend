@@ -1,4 +1,4 @@
-﻿class AppNotification {
+class AppNotification {
   const AppNotification({
     required this.id,
     required this.title,

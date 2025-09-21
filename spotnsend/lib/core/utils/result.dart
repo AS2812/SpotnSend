@@ -1,4 +1,4 @@
-﻿sealed class Result<T> {
+sealed class Result<T> {
   const Result();
 
   R when<R>({required R Function(T data) success, required R Function(String message) failure}) {

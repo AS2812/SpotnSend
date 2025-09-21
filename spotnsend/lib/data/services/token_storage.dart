@@ -1,4 +1,4 @@
-﻿import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final tokenStorageProvider = Provider<TokenStorage>((ref) {
@@ -9,7 +9,7 @@ class TokenStorage {
   TokenStorage()
       : _storage = const FlutterSecureStorage(
           aOptions: AndroidOptions(encryptedSharedPreferences: true),
-          iOptions: IOSOptions(accessibility: KeychainAccessibility.afterFirstUnlock),
+          iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
         );
 
   final FlutterSecureStorage _storage;

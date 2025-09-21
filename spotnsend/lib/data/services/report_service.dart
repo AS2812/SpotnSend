@@ -1,10 +1,9 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 import 'package:spotnsend/core/utils/result.dart';
 import 'package:spotnsend/data/models/report_models.dart';
@@ -52,12 +51,18 @@ class ReportService {
 
     final created = Report(
       id: 'rpt-${DateTime.now().millisecondsSinceEpoch}',
-      category: formData.category!,
-      subcategory: formData.subcategory!,
+      categoryId: formData.categoryId ?? 0,
+      categoryName: formData.category ?? 'General',
+      subcategoryId: formData.subcategoryId,
+      subcategoryName: formData.subcategory,
       description: formData.description,
-      mediaUrls: formData.mediaPaths,
+      media: formData.mediaPaths.isEmpty
+          ? null
+          : formData.mediaPaths.map((path) => ReportMedia(url: path)).toList(),
       lat: formData.selectedLat ?? fallbackLat,
       lng: formData.selectedLng ?? fallbackLng,
+      status: ReportStatus.submitted,
+      priority: formData.priority ?? ReportPriority.normal,
       createdAt: DateTime.now().toUtc(),
     );
 
@@ -71,12 +76,60 @@ class ReportService {
   }
 
   List<ReportCategory> get categories => const [
-        ReportCategory(name: 'Emergency', subcategories: ['Fire', 'Medical', 'Accident']),
-        ReportCategory(name: 'Infrastructure', subcategories: ['Pothole', 'Road damage', 'Broken streetlight']),
-        ReportCategory(name: 'Utilities', subcategories: ['Power outage', 'Water leak', 'Gas leak']),
-        ReportCategory(name: 'Environment', subcategories: ['Flooding', 'Pollution', 'Wildlife']),
-        ReportCategory(name: 'Community', subcategories: ['Event', 'Noise', 'Gathering']),
-        ReportCategory(name: 'Safety', subcategories: ['Suspicious activity', 'Hazard', 'Other']),
+        ReportCategory(
+          id: 1,
+          name: 'Emergency',
+          subcategories: [
+            ReportSubcategory(id: 101, name: 'Fire'),
+            ReportSubcategory(id: 102, name: 'Medical'),
+            ReportSubcategory(id: 103, name: 'Accident'),
+          ],
+        ),
+        ReportCategory(
+          id: 2,
+          name: 'Infrastructure',
+          subcategories: [
+            ReportSubcategory(id: 201, name: 'Pothole'),
+            ReportSubcategory(id: 202, name: 'Road damage'),
+            ReportSubcategory(id: 203, name: 'Broken streetlight'),
+          ],
+        ),
+        ReportCategory(
+          id: 3,
+          name: 'Utilities',
+          subcategories: [
+            ReportSubcategory(id: 301, name: 'Power outage'),
+            ReportSubcategory(id: 302, name: 'Water leak'),
+            ReportSubcategory(id: 303, name: 'Gas leak'),
+          ],
+        ),
+        ReportCategory(
+          id: 4,
+          name: 'Environment',
+          subcategories: [
+            ReportSubcategory(id: 401, name: 'Flooding'),
+            ReportSubcategory(id: 402, name: 'Pollution'),
+            ReportSubcategory(id: 403, name: 'Wildlife'),
+          ],
+        ),
+        ReportCategory(
+          id: 5,
+          name: 'Community',
+          subcategories: [
+            ReportSubcategory(id: 501, name: 'Event'),
+            ReportSubcategory(id: 502, name: 'Noise'),
+            ReportSubcategory(id: 503, name: 'Gathering'),
+          ],
+        ),
+        ReportCategory(
+          id: 6,
+          name: 'Safety',
+          subcategories: [
+            ReportSubcategory(id: 601, name: 'Suspicious activity'),
+            ReportSubcategory(id: 602, name: 'Hazard'),
+            ReportSubcategory(id: 603, name: 'Other'),
+          ],
+        ),
       ];
 
   double _distanceInKm(double lat1, double lon1, double lat2, double lon2) {
@@ -91,4 +144,5 @@ class ReportService {
 
   double _degreesToRadians(double degrees) => degrees * (pi / 180);
 }
+
 

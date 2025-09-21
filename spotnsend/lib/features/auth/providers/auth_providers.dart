@@ -1,16 +1,15 @@
-﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
-import 'package:spotnsend/core/utils/result.dart';
 import 'package:spotnsend/data/models/auth_models.dart';
 import 'package:spotnsend/data/models/user_models.dart';
-import 'package:spotnsend/data/services/auth_service.dart';
+import 'package:spotnsend/data/repositories/auth_repository.dart';
 import 'package:spotnsend/data/services/user_service.dart';
 
 final authControllerProvider = StateNotifierProvider<AuthController, AuthState>((ref) {
-  final authService = ref.watch(authServiceProvider);
+  final authRepository = ref.watch(authRepositoryProvider);
   final userService = ref.watch(userServiceProvider);
-  return AuthController(ref: ref, authService: authService, userService: userService);
+  return AuthController(ref: ref, authRepository: authRepository, userService: userService);
 });
 
 class AuthState {
@@ -47,21 +46,35 @@ class AuthState {
 }
 
 class AuthController extends StateNotifier<AuthState> {
-  AuthController({required this.ref, required this.authService, required this.userService}) : super(const AuthState());
+  AuthController({required this.ref, required this.authRepository, required this.userService}) : super(const AuthState());
 
   final Ref ref;
-  final AuthService authService;
+  final AuthRepository authRepository;
   final UserService userService;
 
-  Future<void> login({required String username, required String password}) async {
+  Future<void> login({required String identifier, required String password}) async {
     state = state.copyWith(isLoading: true, resetError: true);
-    final keepSignedIn = state.keepSignedIn;
-
-    final result = await authService.login(username: username, password: password, keepSignedIn: keepSignedIn);
+    final result = await authRepository.login(
+      identifier: identifier,
+      password: password,
+      keepSignedIn: state.keepSignedIn,
+    );
 
     state = result.when(
       success: (user) {
-        userService.setCurrentUser(user);
+        userService.cacheUser(user);
+        return state.copyWith(user: user, isLoading: false);
+      },
+      failure: (message) => state.copyWith(isLoading: false, error: message),
+    );
+  }
+
+  Future<void> loginTester() async {
+    state = state.copyWith(isLoading: true, resetError: true);
+    final result = await authRepository.loginTester();
+    state = result.when(
+      success: (user) {
+        userService.cacheUser(user);
         return state.copyWith(user: user, isLoading: false);
       },
       failure: (message) => state.copyWith(isLoading: false, error: message),
@@ -69,8 +82,9 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   void updateUser(AppUser user) {
-  state = state.copyWith(user: user, resetError: true);
-}
+    userService.cacheUser(user);
+    state = state.copyWith(user: user, resetError: true);
+  }
 
   void setKeepSignedIn(bool value) {
     state = state.copyWith(keepSignedIn: value);
@@ -78,7 +92,7 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<void> signupStep1(SignupStep1Data data) async {
     state = state.copyWith(isLoading: true, resetError: true);
-    final result = await authService.signupStep1(data);
+    final result = await authRepository.signupStep1(data);
     state = result.when(
       success: (_) => state.copyWith(isLoading: false),
       failure: (message) => state.copyWith(isLoading: false, error: message),
@@ -87,7 +101,7 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<void> signupStep2(SignupStep2Data data) async {
     state = state.copyWith(isLoading: true, resetError: true);
-    final result = await authService.signupStep2(data);
+    final result = await authRepository.signupStep2(data);
     state = result.when(
       success: (_) => state.copyWith(isLoading: false),
       failure: (message) => state.copyWith(isLoading: false, error: message),
@@ -96,10 +110,10 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<void> signupStep3(SignupStep3Data data) async {
     state = state.copyWith(isLoading: true, resetError: true);
-    final result = await authService.signupStep3(data);
+    final result = await authRepository.signupStep3(data);
     state = result.when(
       success: (user) {
-        userService.setCurrentUser(user);
+        userService.cacheUser(user);
         return state.copyWith(user: user, isLoading: false);
       },
       failure: (message) => state.copyWith(isLoading: false, error: message),
@@ -108,34 +122,16 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<void> logout() async {
     state = state.copyWith(isLoading: true, resetError: true);
-    final result = await authService.logout();
+    final result = await authRepository.logout();
     state = result.when(
       success: (_) {
-        userService.setCurrentUser(const AppUser(
-          id: 'user-guest',
-          name: 'Guest User',
-          username: 'guest',
-          email: 'guest@spotnsend.com',
-          phone: '+966500000000',
-          idNumber: '1234567890',
-          selfieUrl: '',
-          status: VerificationStatus.pending,
-          reportsSubmitted: 0,
-          feedbackGiven: 0,
-          savedSpots: [],
-        ));
+        userService.clearCache();
         return const AuthState();
       },
       failure: (message) => state.copyWith(isLoading: false, error: message),
     );
   }
 }
-
-
-
-
-
-
 
 
 

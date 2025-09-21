@@ -1,6 +1,5 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 import 'package:spotnsend/widgets/app_button.dart';
 import 'package:spotnsend/features/home/account/providers/account_providers.dart';
@@ -75,5 +74,6 @@ class MapFiltersSheet extends ConsumerWidget {
     );
   }
 }
+
 
 

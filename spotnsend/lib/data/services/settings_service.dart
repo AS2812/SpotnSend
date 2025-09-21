@@ -1,7 +1,6 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 import 'package:spotnsend/core/utils/result.dart';
 import 'package:spotnsend/data/models/settings_models.dart';
@@ -31,5 +30,6 @@ class SettingsService {
     return Success(_settings);
   }
 }
+
 
 

@@ -10,11 +10,9 @@ String formatShortDate(DateTime dateTime) {
   return formatter.format(dateTime.toLocal());
 }
 
-String formatDistanceKm(double distance) {
-  if (distance % 1 == 0) {
-    return ' km';
-  }
-  return ' km';
+String formatDistanceKm(double distanceKm) {
+  final formatted = distanceKm % 1 == 0 ? distanceKm.toStringAsFixed(0) : distanceKm.toStringAsFixed(1);
+  return '$formatted km';
 }
 
 String maskIdNumber(String idNumber) {
@@ -22,5 +20,5 @@ String maskIdNumber(String idNumber) {
     return idNumber;
   }
   final masked = '*' * (idNumber.length - 4);
-  return '';
+  return '$masked${idNumber.substring(idNumber.length - 4)}';
 }

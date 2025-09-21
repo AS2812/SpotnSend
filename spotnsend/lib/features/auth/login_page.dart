@@ -1,14 +1,13 @@
 ﻿import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/router/routes.dart';
 import '../../core/utils/validators.dart';
 import '../../widgets/app_button.dart';
 import '../../widgets/app_text_field.dart';
-import '../../widgets/toasts.dart';
+import '../../widgets/back_footer_button.dart';
 import 'providers/auth_providers.dart';
 import 'widgets/auth_header.dart';
 
@@ -21,19 +20,19 @@ class LoginPage extends ConsumerStatefulWidget {
 
 class _LoginPageState extends ConsumerState<LoginPage> {
   final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _usernameController;
+  late final TextEditingController _identifierController;
   late final TextEditingController _passwordController;
 
   @override
   void initState() {
     super.initState();
-    _usernameController = TextEditingController();
+    _identifierController = TextEditingController();
     _passwordController = TextEditingController();
   }
 
   @override
   void dispose() {
-    _usernameController.dispose();
+    _identifierController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -42,10 +41,18 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
+    FocusScope.of(context).unfocus();
     await ref.read(authControllerProvider.notifier).login(
-          username: _usernameController.text.trim(),
+          identifier: _identifierController.text.trim(),
           password: _passwordController.text,
         );
+  }
+
+  Future<void> _loginTester() async {
+    _identifierController.text = 'admin';
+    _passwordController.text = 'admin12345';
+    FocusScope.of(context).unfocus();
+    await ref.read(authControllerProvider.notifier).loginTester();
   }
 
   @override
@@ -53,12 +60,19 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final authState = ref.watch(authControllerProvider);
 
     ref.listen<AuthState>(authControllerProvider, (previous, next) {
-      if (previous?.error != next.error && next.error != null) {
-        showErrorToast(context, next.error!);
+      if ((previous?.isAuthenticated ?? false) == false && next.isAuthenticated) {
+        context.go(RoutePaths.homeMap);
       }
     });
 
     return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+        title: const Text('Login'),
+      ),
       body: SingleChildScrollView(
         child: Column(
           children: [
@@ -74,10 +88,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     AppTextField(
-                      controller: _usernameController,
-                      label: 'Username',
-                      hint: 'Enter your username',
-                      validator: (value) => validateNotEmpty(value, fieldName: 'Username'),
+                      controller: _identifierController,
+                      label: 'Email or username',
+                      hint: 'Enter your email or username',
+                      validator: (value) => validateNotEmpty(value, fieldName: 'Identifier'),
                       textInputAction: TextInputAction.next,
                     ),
                     const SizedBox(height: 16),
@@ -100,11 +114,24 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         const Expanded(child: Text('Keep me signed in')),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                    if (authState.error != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Text(
+                          authState.error!,
+                          style: TextStyle(color: Theme.of(context).colorScheme.error),
+                        ),
+                      ),
                     AppButton(
                       label: 'Log in',
                       onPressed: authState.isLoading ? null : _submit,
                       loading: authState.isLoading,
+                    ),
+                    const SizedBox(height: 12),
+                    AppButton(
+                      label: 'Use tester account',
+                      variant: ButtonVariant.secondary,
+                      onPressed: authState.isLoading ? null : _loginTester,
                     ),
                     const SizedBox(height: 24),
                     Center(
@@ -133,7 +160,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           ],
         ),
       ),
+      bottomNavigationBar: const BackFooterButton(),
     );
   }
 }
-

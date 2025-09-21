@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import 'package:spotnsend/core/theme/gradients.dart';
 import 'package:spotnsend/core/theme/typography.dart';

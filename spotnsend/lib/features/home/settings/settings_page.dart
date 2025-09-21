@@ -1,6 +1,5 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 import 'package:spotnsend/data/models/settings_models.dart';
 import 'package:spotnsend/widgets/app_button.dart';
@@ -121,5 +120,6 @@ class SettingsPage extends ConsumerWidget {
     );
   }
 }
+
 
 

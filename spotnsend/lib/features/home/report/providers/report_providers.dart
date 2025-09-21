@@ -1,4 +1,4 @@
-﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 import 'package:spotnsend/core/utils/result.dart';
@@ -24,11 +24,11 @@ class ReportFormNotifier extends StateNotifier<ReportFormData> {
   final Ref ref;
 
   void updateCategory(String? category) {
-    state = state.copyWith(category: category, subcategory: null);
+    state = state.copyWith(categoryName: category, subcategoryId: null, subcategoryName: null);
   }
 
   void updateSubcategory(String? subcategory) {
-    state = state.copyWith(subcategory: subcategory);
+    state = state.copyWith(subcategoryName: subcategory);
   }
 
   void updateDescription(String description) {
@@ -81,8 +81,10 @@ final reportSubcategoriesProvider = Provider<List<String>>((ref) {
   if (match.isEmpty) {
     return const [];
   }
-  return match.first.subcategories;
+  return match.first.subcategories.map((item) => item.name).toList();
 });
+
+
 
 
 

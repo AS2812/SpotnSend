@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:spotnsend/core/utils/result.dart';
@@ -120,6 +120,14 @@ class UserService {
     }
   }
 
+  void cacheUser(AppUser user) {
+    _cachedUser = user;
+  }
+
+  void clearCache() {
+    _cachedUser = null;
+  }
+
   Future<AppUser> refreshCachedUser() async {
     _cachedUser = await fetchProfile(forceRefresh: true);
     return _cachedUser!;
@@ -133,3 +141,5 @@ class UserService {
     return error.message ?? 'Unexpected error occurred.';
   }
 }
+
+

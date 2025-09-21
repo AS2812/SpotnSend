@@ -1,4 +1,4 @@
-﻿class RoutePaths {
+class RoutePaths {
   static const String login = '/login';
   static const String signupStep1 = '/signup/step-1';
   static const String signupStep2 = '/signup/step-2';

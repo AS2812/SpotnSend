@@ -1,4 +1,4 @@
-﻿enum ReportAudience { people, government, both }
+enum ReportAudience { people, government, both }
 
 enum ReportStatus { submitted, underReview, approved, rejected, archived }
 
@@ -74,6 +74,13 @@ class Report {
           : null,
     );
   }
+
+  String get category => categoryName;
+
+  String get subcategory => subcategoryName ?? '';
+
+  List<String> get mediaUrls =>
+      (media == null || media!.isEmpty) ? const [] : media!.map((item) => item.url).toList(growable: false);
 }
 
 class ReportMedia {
@@ -100,9 +107,13 @@ class ReportMedia {
 }
 
 class ReportFormData {
+  static const _unset = Object();
+
   ReportFormData({
     this.categoryId,
     this.subcategoryId,
+    this.categoryName,
+    this.subcategoryName,
     this.description = '',
     this.mediaPaths = const [],
     this.audience = ReportAudience.people,
@@ -117,6 +128,8 @@ class ReportFormData {
 
   final int? categoryId;
   final int? subcategoryId;
+  final String? categoryName;
+  final String? subcategoryName;
   final String description;
   final List<String> mediaPaths;
   final ReportAudience audience;
@@ -128,33 +141,41 @@ class ReportFormData {
   final ReportAudience? notifyScope;
   final ReportPriority? priority;
 
+  String? get category => categoryName;
+
+  String? get subcategory => subcategoryName;
+
   ReportFormData copyWith({
-    int? categoryId,
-    int? subcategoryId,
+    Object? categoryId = _unset,
+    Object? subcategoryId = _unset,
+    Object? categoryName = _unset,
+    Object? subcategoryName = _unset,
     String? description,
     List<String>? mediaPaths,
     ReportAudience? audience,
     bool? useCurrentLocation,
-    double? selectedLat,
-    double? selectedLng,
+    Object? selectedLat = _unset,
+    Object? selectedLng = _unset,
     bool? agreedToTerms,
     double? radiusKm,
-    ReportAudience? notifyScope,
-    ReportPriority? priority,
+    Object? notifyScope = _unset,
+    Object? priority = _unset,
   }) {
     return ReportFormData(
-      categoryId: categoryId ?? this.categoryId,
-      subcategoryId: subcategoryId ?? this.subcategoryId,
+      categoryId: identical(categoryId, _unset) ? this.categoryId : categoryId as int?,
+      subcategoryId: identical(subcategoryId, _unset) ? this.subcategoryId : subcategoryId as int?,
+      categoryName: identical(categoryName, _unset) ? this.categoryName : categoryName as String?,
+      subcategoryName: identical(subcategoryName, _unset) ? this.subcategoryName : subcategoryName as String?,
       description: description ?? this.description,
       mediaPaths: mediaPaths ?? this.mediaPaths,
       audience: audience ?? this.audience,
       useCurrentLocation: useCurrentLocation ?? this.useCurrentLocation,
-      selectedLat: selectedLat ?? this.selectedLat,
-      selectedLng: selectedLng ?? this.selectedLng,
+      selectedLat: identical(selectedLat, _unset) ? this.selectedLat : selectedLat as double?,
+      selectedLng: identical(selectedLng, _unset) ? this.selectedLng : selectedLng as double?,
       agreedToTerms: agreedToTerms ?? this.agreedToTerms,
       radiusKm: radiusKm ?? this.radiusKm,
-      notifyScope: notifyScope ?? this.notifyScope,
-      priority: priority ?? this.priority,
+      notifyScope: identical(notifyScope, _unset) ? this.notifyScope : notifyScope as ReportAudience?,
+      priority: identical(priority, _unset) ? this.priority : priority as ReportPriority?,
     );
   }
 }
@@ -162,22 +183,22 @@ class ReportFormData {
 class ReportFilters {
   const ReportFilters({
     required this.radiusKm,
-    required this.categoryIds,
+    required this.categories,
     required this.includeSavedSpots,
   });
 
   final double radiusKm;
-  final Set<int> categoryIds;
+  final Set<String> categories;
   final bool includeSavedSpots;
 
   ReportFilters copyWith({
     double? radiusKm,
-    Set<int>? categoryIds,
+    Set<String>? categories,
     bool? includeSavedSpots,
   }) {
     return ReportFilters(
       radiusKm: radiusKm ?? this.radiusKm,
-      categoryIds: categoryIds ?? this.categoryIds,
+      categories: categories ?? this.categories,
       includeSavedSpots: includeSavedSpots ?? this.includeSavedSpots,
     );
   }

@@ -1,4 +1,4 @@
-﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 import 'package:spotnsend/core/utils/result.dart';
@@ -57,6 +57,8 @@ class NotificationsController extends StateNotifier<AsyncValue<List<AppNotificat
     await load();
   }
 }
+
+
 
 
 

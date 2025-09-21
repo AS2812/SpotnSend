@@ -1,4 +1,4 @@
-﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:location/location.dart';
 
@@ -94,6 +94,8 @@ final nearbyReportsProvider = FutureProvider.autoDispose<List<Report>>((ref) asy
     categories: filters.categories,
   );
 });
+
+
 
 
 
