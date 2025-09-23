@@ -8,6 +8,10 @@ import 'package:spotnsend/shared/widgets/toasts.dart';
 import 'package:spotnsend/features/home/settings/providers/settings_providers.dart';
 import 'package:spotnsend/l10n/app_localizations.dart';
 
+// NEW: service + enable page
+import 'package:spotnsend/data/models/two_factor_service.dart';
+import 'package:spotnsend/features/home/settings/providers/enable_two_factor_page.dart';
+
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
 
@@ -30,32 +34,85 @@ class SettingsPage extends ConsumerWidget {
           SwitchListTile(
             title: Text('Notifications'.tr()),
             subtitle: Text(
-                'Receive push notifications about nearby incidents and alerts.'
-                    .tr()),
+              'Receive push notifications about nearby incidents and alerts.'
+                  .tr(),
+            ),
             value: settings.notificationsOn,
             onChanged: (value) async {
               await controller.updateNotifications(value);
-              showSuccessToast(context,
-                  value ? 'Notifications enabled.' : 'Notifications disabled.');
+              showSuccessToast(
+                context,
+                value
+                    ? 'Notifications enabled.'.tr()
+                    : 'Notifications disabled.'.tr(),
+              );
             },
           ),
+
+          // 2FA
           SwitchListTile(
             title: Text('Two-factor authentication'.tr()),
             subtitle:
                 Text('Add a verified phone for an extra security step.'.tr()),
             value: settings.twoFactorEnabled,
             onChanged: (value) async {
-              await controller.updateTwoFactor(value);
-              showSuccessToast(
-                  context, value ? '2FA enabled.' : '2FA disabled.');
+              if (value) {
+                // Enabling: push the enroll/verify screen.
+                final enabled = await Navigator.of(context).push<bool>(
+                  MaterialPageRoute(
+                      builder: (_) => const EnableTwoFactorPage()),
+                );
+                if (enabled == true) {
+                  await controller.updateTwoFactor(true);
+                  showSuccessToast(context, '2FA enabled.'.tr());
+                }
+              } else {
+                // Disabling: confirm, then unenroll all TOTP factors.
+                final yes = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    title: Text('Disable two-factor?'.tr()),
+                    content: Text(
+                      'You will no longer need a 6-digit code to sign in.'.tr(),
+                    ),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: Text('Cancel'.tr())),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        style:
+                            TextButton.styleFrom(foregroundColor: Colors.red),
+                        child: Text('Disable'.tr()),
+                      ),
+                    ],
+                  ),
+                );
+                if (yes == true) {
+                  final res =
+                      await ref.read(twoFactorServiceProvider).disableTotp();
+                  res.when(
+                    success: (_) async {
+                      await controller.updateTwoFactor(false);
+                      showSuccessToast(context, '2FA disabled.'.tr());
+                    },
+                    failure: (m) => showErrorToast(context, m),
+                  );
+                }
+              }
             },
           ),
+
           const SizedBox(height: 24),
+
+          // Language
           SwitchListTile(
             title: Text('Arabic Language'.tr()),
-            subtitle: Text(settings.language == AppLanguage.arabic
-                ? 'Using Arabic interface'.tr()
-                : 'Using English interface'.tr()),
+            subtitle: Text(
+              settings.language == AppLanguage.arabic
+                  ? 'Using Arabic interface'.tr()
+                  : 'Using English interface'.tr(),
+            ),
             value: settings.language == AppLanguage.arabic,
             onChanged: (value) async {
               final newLanguage =
@@ -64,35 +121,38 @@ class SettingsPage extends ConsumerWidget {
               showSuccessToast(context, 'Language updated.'.tr());
             },
           ),
+
+          // Theme
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.palette_outlined),
-                      const SizedBox(width: 12),
-                      Text('Theme'.tr(),
-                          style: Theme.of(context).textTheme.titleMedium),
-                    ],
-                  ),
+                  Row(children: [
+                    const Icon(Icons.palette_outlined),
+                    const SizedBox(width: 12),
+                    Text('Theme'.tr(),
+                        style: Theme.of(context).textTheme.titleMedium),
+                  ]),
                   const SizedBox(height: 16),
                   SegmentedButton<AppThemeMode>(
                     segments: [
                       ButtonSegment(
-                          value: AppThemeMode.light,
-                          icon: const Icon(Icons.light_mode_rounded),
-                          label: Text('Light'.tr())),
+                        value: AppThemeMode.light,
+                        icon: const Icon(Icons.light_mode_rounded),
+                        label: Text('Light'.tr()),
+                      ),
                       ButtonSegment(
-                          value: AppThemeMode.dark,
-                          icon: const Icon(Icons.dark_mode_rounded),
-                          label: Text('Dark'.tr())),
+                        value: AppThemeMode.dark,
+                        icon: const Icon(Icons.dark_mode_rounded),
+                        label: Text('Dark'.tr()),
+                      ),
                       ButtonSegment(
-                          value: AppThemeMode.system,
-                          icon: const Icon(Icons.phone_iphone_rounded),
-                          label: Text('System'.tr())),
+                        value: AppThemeMode.system,
+                        icon: const Icon(Icons.phone_iphone_rounded),
+                        label: Text('System'.tr()),
+                      ),
                     ],
                     selected: <AppThemeMode>{settings.themeMode},
                     onSelectionChanged: (selection) =>
@@ -102,7 +162,9 @@ class SettingsPage extends ConsumerWidget {
               ),
             ),
           ),
+
           const SizedBox(height: 24),
+
           ListTile(
             leading: const Icon(Icons.lock_reset_rounded),
             title: Text('Change password'.tr()),
@@ -130,6 +192,7 @@ class SettingsPage extends ConsumerWidget {
             title: Text('Terms & Conditions'.tr()),
             onTap: () => context.push('/terms-conditions'),
           ),
+
           const SizedBox(height: 24),
           ListTile(
             leading: const Icon(Icons.logout_rounded, color: Colors.red),
@@ -137,6 +200,7 @@ class SettingsPage extends ConsumerWidget {
                 Text('Logout'.tr(), style: const TextStyle(color: Colors.red)),
             onTap: () => _showLogoutDialog(context, ref),
           ),
+
           const SizedBox(height: 24),
           Center(child: Text('App version '.tr() + settings.appVersion)),
         ],
@@ -152,9 +216,8 @@ class SettingsPage extends ConsumerWidget {
         content: Text('Are you sure you want to logout?'.tr()),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text('Cancel'.tr()),
-          ),
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text('Cancel'.tr())),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
@@ -163,7 +226,6 @@ class SettingsPage extends ConsumerWidget {
         ],
       ),
     );
-
     if (result == true) {
       await ref.read(authControllerProvider.notifier).logout();
     }

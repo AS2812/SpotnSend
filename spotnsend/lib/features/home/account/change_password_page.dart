@@ -6,8 +6,6 @@ import 'package:spotnsend/shared/widgets/app_button.dart';
 import 'package:spotnsend/shared/widgets/app_text_field.dart';
 import 'package:spotnsend/shared/widgets/toasts.dart';
 import 'package:spotnsend/l10n/app_localizations.dart';
-
-// <-- import the service so we can read its provider
 import 'package:spotnsend/data/services/supabase_user_service.dart';
 
 class ChangePasswordPage extends ConsumerStatefulWidget {
@@ -19,9 +17,11 @@ class ChangePasswordPage extends ConsumerStatefulWidget {
 
 class _ChangePasswordPageState extends ConsumerState<ChangePasswordPage> {
   final _formKey = GlobalKey<FormState>();
+
   final _currentPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+
   bool _isLoading = false;
 
   @override
@@ -56,15 +56,22 @@ class _ChangePasswordPageState extends ConsumerState<ChangePasswordPage> {
     res.when(
       success: (_) {
         showSuccessToast(context, 'Password changed successfully'.tr());
+        _currentPasswordController.clear();
+        _newPasswordController.clear();
+        _confirmPasswordController.clear();
         Navigator.of(context).maybePop();
       },
       failure: (msg) => showErrorToast(
-          context, msg.isEmpty ? 'Failed to change password'.tr() : msg),
+        context,
+        msg.isEmpty ? 'Failed to change password'.tr() : msg,
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
     return Scaffold(
       appBar: AppBar(title: Text('Change Password'.tr())),
       body: SingleChildScrollView(
@@ -78,20 +85,20 @@ class _ChangePasswordPageState extends ConsumerState<ChangePasswordPage> {
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primaryContainer,
+                  color: cs.primaryContainer,
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Column(
                   children: [
-                    Icon(Icons.lock_reset_rounded,
-                        size: 48, color: Theme.of(context).colorScheme.primary),
+                    Icon(Icons.lock_reset_rounded, size: 48, color: cs.primary),
                     const SizedBox(height: 12),
-                    Text('Update Your Password'.tr(),
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleLarge
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                        textAlign: TextAlign.center),
+                    Text(
+                      'Update Your Password'.tr(),
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                      textAlign: TextAlign.center,
+                    ),
                     const SizedBox(height: 8),
                     Text(
                       'Enter your current password and choose a new secure password.'
@@ -104,27 +111,34 @@ class _ChangePasswordPageState extends ConsumerState<ChangePasswordPage> {
               ),
               const SizedBox(height: 32),
 
+              // Current password
               AppTextField(
                 controller: _currentPasswordController,
                 label: 'Current Password'.tr(),
                 hint: 'Enter your current password'.tr(),
                 obscureText: true,
-                validator: (v) => validateNotEmpty(context, v,
-                    fieldName: 'Current Password'.tr()),
+                validator: (v) => validateNotEmpty(
+                  context,
+                  v,
+                  fieldName: 'Current Password'.tr(),
+                ),
                 textInputAction: TextInputAction.next,
               ),
               const SizedBox(height: 16),
 
+              // New password
               AppTextField(
                 controller: _newPasswordController,
                 label: 'New Password'.tr(),
                 hint: 'Enter your new password'.tr(),
                 obscureText: true,
+                // Reuse your existing password validator
                 validator: (v) => validatePassword(context, v),
                 textInputAction: TextInputAction.next,
               ),
               const SizedBox(height: 16),
 
+              // Confirm password
               AppTextField(
                 controller: _confirmPasswordController,
                 label: 'Confirm New Password'.tr(),
@@ -138,6 +152,7 @@ class _ChangePasswordPageState extends ConsumerState<ChangePasswordPage> {
                 },
                 textInputAction: TextInputAction.done,
               ),
+
               const SizedBox(height: 32),
 
               AppButton(
@@ -152,29 +167,36 @@ class _ChangePasswordPageState extends ConsumerState<ChangePasswordPage> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceVariant,
+                  color: cs.surfaceVariant,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(children: [
-                      Icon(Icons.tips_and_updates_rounded,
-                          color: Theme.of(context).colorScheme.primary,
-                          size: 20),
-                      const SizedBox(width: 8),
-                      Text('Password Security Tips'.tr(),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.tips_and_updates_rounded,
+                          color: cs.primary,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Password Security Tips'.tr(),
                           style: Theme.of(context)
                               .textTheme
                               .titleSmall
-                              ?.copyWith(fontWeight: FontWeight.bold)),
-                    ]),
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 12),
-                    Text('password_security_tips'.tr(),
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodySmall
-                            ?.copyWith(height: 1.5)),
+                    Text(
+                      'password_security_tips'.tr(),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(height: 1.5),
+                    ),
                   ],
                 ),
               ),

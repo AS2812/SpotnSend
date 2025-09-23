@@ -1,5 +1,6 @@
-import 'dart:io';
-
+// lib/data/services/supabase_reports_service.dart
+import 'dart:io' show File; // safe: we guard usage on !kIsWeb
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -26,20 +27,36 @@ class SupabaseReportService {
   SupabaseQueryBuilder _media() =>
       _client.schema('civic_app').from('report_media');
 
+  /// Nearby reports via RPC with radius (meters) and optional category filter.
   Future<List<Report>> fetchNearby({
     required double lat,
     required double lng,
     required double radiusKm,
     required Set<int> categoryIds,
   }) async {
-    // Basic list for now (no geospatial function call, can be optimized with RPC later)
-    final rows = await _reports()
-        .select()
-        .order('created_at', ascending: false)
-        .limit(50) as List<dynamic>;
-    return rows.whereType<Map<String, dynamic>>().map(Report.fromJson).toList();
+    // Call the RPC; pass null for categories when empty.
+    final params = <String, dynamic>{
+      'p_lat': lat,
+      'p_lng': lng,
+      'p_radius_m': (radiusKm * 1000).round(),
+      if (categoryIds.isNotEmpty) 'p_category_ids': categoryIds.toList(),
+    };
+
+    final result =
+        await _client.rpc('civic_app.reports_nearby', params: params);
+
+    // Supabase returns a List<dynamic> for set-returning functions
+    final rows = (result is List) ? result : const <dynamic>[];
+
+    return rows
+        .whereType<Map<String, dynamic>>()
+        .map(_normalizeNearbyRow)
+        .map(Report.fromJson)
+        .toList(growable: false);
   }
 
+  /// Create a report using the simple RPC.
+  /// Also uploads media (mobile/desktop only; web is skipped by design).
   Future<Result<Report>> submit({
     required ReportFormData formData,
     required AppUser user,
@@ -52,43 +69,98 @@ class SupabaseReportService {
     }
 
     try {
-      // Create report (using simple function for now)
-      final result = await _client.rpc('create_report_simple', params: {
+      final lat =
+          formData.selectedLat ?? user.savedSpots.firstOrNull?.lat ?? 24.7136;
+      final lng =
+          formData.selectedLng ?? user.savedSpots.firstOrNull?.lng ?? 46.6753;
+
+      final notifyScope = (formData.notifyScope ?? formData.audience).name;
+      final priority = (formData.priority ?? ReportPriority.normal).name;
+
+      final result =
+          await _client.rpc('civic_app.create_report_simple', params: {
         'p_category_id': formData.categoryId,
         'p_subcategory_id': formData.subcategoryId,
         'p_description': formData.description.trim(),
-        'p_lat':
-            formData.selectedLat ?? user.savedSpots.firstOrNull?.lat ?? 24.7136,
-        'p_lng':
-            formData.selectedLng ?? user.savedSpots.firstOrNull?.lng ?? 46.6753,
+        'p_lat': lat,
+        'p_lng': lng,
         'p_radius': (formData.radiusKm * 1000).round(),
-        'p_priority': (formData.priority ?? ReportPriority.normal).name,
-        'p_notify': (formData.notifyScope ?? formData.audience).name,
+        'p_priority': priority,
+        'p_notify': notifyScope,
       });
 
-      final reportId = result['report_id'] as int;
-      final fetched =
-          await _reports().select().eq('report_id', reportId).single();
-      var report = Report.fromJson(fetched);
+      // The RPC may return the inserted row or just an id. Handle both.
+      Map<String, dynamic>? insertedRow;
+      int? newId;
 
-      // Upload media if any
-      if (formData.mediaPaths.isNotEmpty) {
-        for (final path in formData.mediaPaths) {
-          final file = File(path);
-          if (!await file.exists()) continue;
-          final ext = path.split('.').last;
-          final storagePath =
-              'reports/${report.id}/${DateTime.now().millisecondsSinceEpoch}.$ext';
-          final bytes = await file.readAsBytes();
-          await _client.storage
-              .from('report-media')
-              .uploadBinary(storagePath, bytes);
-          await _media().insert({
-            'report_id': report.id,
-            'media_type': 'image',
-            'storage_url': storagePath,
-          });
+      if (result is Map<String, dynamic>) {
+        // If it already looks like a full row
+        if (result.containsKey('report_id')) {
+          insertedRow = result;
+          newId = _asInt(result['report_id']);
+        } else if (result.values.length == 1 && result.values.first is int) {
+          newId = _asInt(result.values.first);
         }
+      } else if (result is List && result.isNotEmpty) {
+        final first = result.first;
+        if (first is Map<String, dynamic>) {
+          insertedRow = first;
+          newId = _asInt(first['report_id']);
+        }
+      } else if (result is int) {
+        newId = result;
+      } else if (result is num) {
+        newId = result.toInt();
+      }
+
+      // Ensure we have a full row to parse
+      Map<String, dynamic> row;
+      if (insertedRow != null) {
+        row = insertedRow!;
+      } else if (newId != null) {
+        row = await _reports().select().eq('report_id', newId).single();
+      } else {
+        return const Failure(
+            'Unexpected response from server while creating report');
+      }
+
+      var report = Report.fromJson(row);
+
+      // Upload media (skip on web to avoid dart:io issues)
+      if (!kIsWeb && formData.mediaPaths.isNotEmpty) {
+        for (final path in formData.mediaPaths) {
+          try {
+            final file = File(path);
+            if (!await file.exists()) continue;
+
+            final ext = path.split('.').last;
+            final storagePath =
+                'reports/${report.id}/${DateTime.now().millisecondsSinceEpoch}.$ext';
+
+            final bytes = await file.readAsBytes();
+            await _client.storage
+                .from('report-media')
+                .uploadBinary(storagePath, bytes);
+
+            await _media().insert({
+              'report_id': report.id,
+              'media_type': 'image',
+              'storage_url': storagePath,
+            });
+          } catch (_) {
+            // Non-fatal: continue with next file
+          }
+        }
+
+        // (Optional) re-fetch media URLs for the report if your model shows them
+        // final mediaRows = await _media().select().eq('report_id', report.id);
+        // report = report.copyWith(
+        //   mediaUrls: mediaRows
+        //       .whereType<Map<String, dynamic>>()
+        //       .map((m) => (m['storage_url'] ?? '').toString())
+        //       .where((s) => s.isNotEmpty)
+        //       .toList(),
+        // );
       }
 
       return Success(report);
@@ -99,28 +171,64 @@ class SupabaseReportService {
     }
   }
 
+  /// All categories with their subcategories (for the Report form).
   Future<List<ReportCategory>> loadCategories() async {
     final cats = await _categories()
-        .select('category_id,name')
-        .order('sort_order') as List<dynamic>;
+        .select('category_id,name,sort_order')
+        .order('sort_order', ascending: true) as List<dynamic>;
+
     final subs = await _subcategories()
-        .select('subcategory_id,category_id,name')
-        .order('sort_order') as List<dynamic>;
+        .select('subcategory_id,category_id,name,sort_order')
+        .order('sort_order', ascending: true) as List<dynamic>;
+
     final subByCat = <int, List<ReportSubcategory>>{};
     for (final row in subs.whereType<Map<String, dynamic>>()) {
-      final catId = (row['category_id'] as num).toInt();
-      (subByCat[catId] ??= []).add(ReportSubcategory(
-          id: (row['subcategory_id'] as num).toInt(),
-          name: (row['name'] ?? '').toString()));
+      final catId = _asInt(row['category_id'])!;
+      (subByCat[catId] ??= []).add(
+        ReportSubcategory(
+          id: _asInt(row['subcategory_id'])!,
+          name: (row['name'] ?? '').toString(),
+        ),
+      );
     }
 
     return cats.whereType<Map<String, dynamic>>().map((row) {
-      final id = (row['category_id'] as num).toInt();
+      final id = _asInt(row['category_id'])!;
       return ReportCategory(
-          id: id,
-          name: (row['name'] ?? '').toString(),
-          subcategories: subByCat[id] ?? const []);
+        id: id,
+        name: (row['name'] ?? '').toString(),
+        subcategories: subByCat[id] ?? const [],
+      );
     }).toList(growable: false);
+  }
+
+  /// Convert the RPC row into the shape expected by Report.fromJson.
+  Map<String, dynamic> _normalizeNearbyRow(Map<String, dynamic> row) {
+    final m = Map<String, dynamic>.from(row);
+
+    // standardize keys
+    m['id'] = m['id'] ?? m['report_id'];
+    m['lat'] = m['lat'] ?? m['latitude'];
+    m['lng'] = m['lng'] ?? m['longitude'];
+    m['category'] = m['category'] ?? m['category_name'];
+    m['subcategory'] = m['subcategory'] ?? m['subcategory_name'];
+    m['priority'] = (m['priority'] ?? '').toString();
+    m['status'] = (m['status'] ?? '').toString();
+
+    // createdAt variations
+    final created = m['createdAt'] ?? m['created_at'];
+    if (created != null) {
+      m['createdAt'] = created.toString();
+    }
+
+    return m;
+  }
+
+  int? _asInt(dynamic v) {
+    if (v == null) return null;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse(v.toString());
   }
 }
 

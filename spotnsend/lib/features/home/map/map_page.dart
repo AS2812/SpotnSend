@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,15 +8,17 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 
 import 'package:spotnsend/core/utils/formatters.dart';
 import 'package:spotnsend/data/models/report_models.dart';
+import 'package:spotnsend/data/models/alert_models.dart';
+import 'package:spotnsend/data/models/user_models.dart';
 import 'package:spotnsend/features/auth/providers/auth_providers.dart';
-import 'package:spotnsend/shared/widgets/app_button.dart';
-import 'package:spotnsend/shared/widgets/toasts.dart';
+import 'package:spotnsend/features/home/account/providers/account_providers.dart';
 import 'package:spotnsend/features/home/map/providers/map_providers.dart';
 import 'package:spotnsend/features/home/map/providers/alerts_providers.dart';
-import 'package:spotnsend/data/models/alert_models.dart';
 import 'package:spotnsend/features/home/map/widgets/alert_detail_sheet.dart';
 import 'package:spotnsend/features/home/map/widgets/filters_sheet.dart';
 import 'package:spotnsend/features/home/map/widgets/legend.dart';
+import 'package:spotnsend/shared/widgets/app_button.dart';
+import 'package:spotnsend/shared/widgets/toasts.dart';
 import 'package:spotnsend/l10n/app_localizations.dart';
 
 class MapPage extends ConsumerStatefulWidget {
@@ -26,185 +30,253 @@ class MapPage extends ConsumerStatefulWidget {
 
 class _MapPageState extends ConsumerState<MapPage> {
   MaplibreMapController? _controller;
+
+  // Markers by type
   final Map<Symbol, Report> _reportBySymbol = {};
   final Map<Symbol, Alert> _alertBySymbol = {};
+  final Map<Symbol, SavedSpot> _savedSpotBySymbol = {};
+
+  // User & view state
   LatLng _initialCenter = const LatLng(24.7136, 46.6753);
-  Circle? _radiusCircle;
   LatLng? _userLocation;
   Symbol? _userLocationMarker;
+
+  // Geodesic radius as a filled polygon (real meters)
+  Fill? _radiusFill;
 
   @override
   void initState() {
     super.initState();
-    // Immediately try to get user location and center map
-    _centerToUserLocation();
+    _primeUserLocation();
 
+    // After first frame, wire listeners to providers
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // User location -> recenter & redraw radius & alerts refresh
       ref.listen<AsyncValue<LocationData?>>(currentLocationProvider,
-          (previous, next) {
-        next.whenOrNull(data: (data) {
-          if (data != null) {
-            final target = LatLng(data.latitude!, data.longitude!);
-            _initialCenter = target;
-            _userLocation = target;
+          (prev, next) {
+        next.whenOrNull(data: (data) async {
+          if (data == null) return;
+          final where = LatLng(data.latitude!, data.longitude!);
+          _userLocation = where;
+          _initialCenter = where;
 
-            // Always center map to user location
-            if (_controller != null) {
-              _controller!.animateCamera(CameraUpdate.newLatLng(target));
-              _addUserLocationMarker(target);
-              _updateRadiusCircle();
-            }
+          if (_controller != null) {
+            await _controller!.animateCamera(
+              CameraUpdate.newCameraPosition(
+                CameraPosition(target: where, zoom: 15.5),
+              ),
+            );
+            await _putUserMarker(where);
+            await _drawSearchRadius();
           }
+
+          // pull alerts for the new location
+          await _pullAlerts();
         });
       });
 
-      ref.listen<AsyncValue<List<Report>>>(nearbyReportsProvider,
-          (previous, next) {
+      // Nearby reports (use realtime-aware provider)
+      ref.listen<AsyncValue<List<Report>>>(mapReportsControllerProvider,
+          (prev, next) {
         next.whenOrNull(data: (reports) => _syncReportMarkers(reports));
       });
 
-      // Listen to alerts
-      ref.listen<AsyncValue<List<Alert>>>(
-          nearbyAlertsProvider({
-            'lat': _userLocation?.latitude ?? _initialCenter.latitude,
-            'lng': _userLocation?.longitude ?? _initialCenter.longitude,
-            'radiusKm': 10.0,
-          }), (previous, next) {
-        next.whenOrNull(data: (alerts) => _syncAlertMarkers(alerts));
+      // Saved spots (pretty cyan markers), respect filter
+      ref.listen<AsyncValue<List<SavedSpot>>>(accountSavedSpotsProvider,
+          (prev, next) async {
+        final spots = next.value ?? const <SavedSpot>[];
+        await _syncSavedSpotMarkers(spots);
       });
 
-      // Listen to radius changes to update circle
-      ref.listen<ReportFilters>(mapFiltersProvider, (previous, next) {
-        if (previous?.radiusKm != next.radiusKm) {
-          _updateRadiusCircle();
+      // Radius knob changed: redraw circle & refresh alerts
+      ref.listen<ReportFilters>(mapFiltersProvider, (prev, next) async {
+        final prevRadius = prev?.radiusKm;
+        final prevSaved = prev?.includeSavedSpots;
+
+        if (prevRadius != next.radiusKm) {
+          await _drawSearchRadius();
+          await _pullAlerts();
+        }
+        if (prevSaved != next.includeSavedSpots) {
+          final spots = await ref.read(accountSavedSpotsProvider.future);
+          await _syncSavedSpotMarkers(spots);
         }
       });
     });
   }
 
-  Future<void> _syncReportMarkers(List<Report> reports) async {
-    if (_controller == null) {
-      return;
+  Future<void> _primeUserLocation() async {
+    final loc = await ref.read(currentLocationProvider.future);
+    if (loc != null) {
+      final where = LatLng(loc.latitude!, loc.longitude!);
+      _initialCenter = where;
+      _userLocation = where;
     }
+  }
 
-    // Clear only report markers
-    for (final symbol in _reportBySymbol.keys) {
-      await _controller!.removeSymbol(symbol);
+  // -------------------- Markers & Overlays --------------------
+
+  Future<void> _syncReportMarkers(List<Report> reports) async {
+    if (_controller == null) return;
+
+    for (final s in _reportBySymbol.keys) {
+      await _controller!.removeSymbol(s);
     }
     _reportBySymbol.clear();
 
-    for (final report in reports) {
-      final symbol = await _controller!.addSymbol(
+    for (final r in reports) {
+      final s = await _controller!.addSymbol(
         SymbolOptions(
-          geometry: LatLng(report.lat, report.lng),
+          geometry: LatLng(r.lat, r.lng),
           iconImage: 'marker-15',
-          iconColor: '#EB3E50', // Red for reports
+          iconColor: '#EB3E50', // red
           iconSize: 1.4,
         ),
       );
-      _reportBySymbol[symbol] = report;
+      _reportBySymbol[s] = r;
     }
   }
 
   Future<void> _syncAlertMarkers(List<Alert> alerts) async {
-    if (_controller == null) {
-      return;
-    }
+    if (_controller == null) return;
 
-    // Clear only alert markers
-    for (final symbol in _alertBySymbol.keys) {
-      await _controller!.removeSymbol(symbol);
+    for (final s in _alertBySymbol.keys) {
+      await _controller!.removeSymbol(s);
     }
     _alertBySymbol.clear();
 
-    for (final alert in alerts) {
-      // Different colors based on severity
-      String color = '#FF9800'; // Orange for medium
-      switch (alert.severity) {
-        case AlertSeverity.low:
-          color = '#4CAF50'; // Green
-          break;
-        case AlertSeverity.medium:
-          color = '#FF9800'; // Orange
-          break;
-        case AlertSeverity.high:
-          color = '#F44336'; // Red
-          break;
-        case AlertSeverity.critical:
-          color = '#9C27B0'; // Purple
-          break;
-      }
+    for (final a in alerts) {
+      final color = switch (a.severity) {
+        AlertSeverity.low => '#4CAF50',
+        AlertSeverity.medium => '#FF9800',
+        AlertSeverity.high => '#F44336',
+        AlertSeverity.critical => '#9C27B0',
+      };
 
-      final symbol = await _controller!.addSymbol(
+      final s = await _controller!.addSymbol(
         SymbolOptions(
-          geometry: LatLng(alert.latitude, alert.longitude),
+          geometry: LatLng(a.latitude, a.longitude),
           iconImage: 'marker-15',
           iconColor: color,
-          iconSize: 1.8, // Slightly larger than reports
+          iconSize: 1.8,
         ),
       );
-      _alertBySymbol[symbol] = alert;
+      _alertBySymbol[s] = a;
     }
   }
 
-  Future<void> _centerToUserLocation() async {
-    final locationAsync = ref.read(currentLocationProvider);
-    locationAsync.whenData((data) {
-      if (data != null) {
-        final target = LatLng(data.latitude!, data.longitude!);
-        _initialCenter = target;
-        _userLocation = target;
-      }
-    });
-  }
-
-  Future<void> _addUserLocationMarker(LatLng location) async {
+  Future<void> _syncSavedSpotMarkers(List<SavedSpot> spots) async {
     if (_controller == null) return;
 
-    // Remove existing user marker
+    // Clear current spot markers
+    for (final s in _savedSpotBySymbol.keys) {
+      await _controller!.removeSymbol(s);
+    }
+    _savedSpotBySymbol.clear();
+
+    // Respect filter: only draw when enabled
+    final filters = ref.read(mapFiltersProvider);
+    if (!filters.includeSavedSpots) return;
+
+    for (final sp in spots) {
+      final s = await _controller!.addSymbol(
+        SymbolOptions(
+          geometry: LatLng(sp.lat, sp.lng),
+          iconImage: 'marker-15',
+          iconColor: '#00BCD4', // cyan for saved spots
+          iconSize: 1.6,
+        ),
+      );
+      _savedSpotBySymbol[s] = sp;
+    }
+  }
+
+  Future<void> _putUserMarker(LatLng at) async {
+    if (_controller == null) return;
     if (_userLocationMarker != null) {
       await _controller!.removeSymbol(_userLocationMarker!);
     }
-
-    // Add user location marker with distinct style
     _userLocationMarker = await _controller!.addSymbol(
       SymbolOptions(
-        geometry: location,
+        geometry: at,
         iconImage: 'marker-15',
-        iconColor: '#4CAF50', // Green color for user location
+        iconColor: '#4CAF50', // green
         iconSize: 1.6,
       ),
     );
   }
 
-  Future<void> _updateRadiusCircle() async {
+  /// Draw a true-meters circle as a polygon fill around the user location.
+  Future<void> _drawSearchRadius() async {
     if (_controller == null || _userLocation == null) return;
 
-    // Remove existing circle
-    if (_radiusCircle != null) {
-      await _controller!.removeCircle(_radiusCircle!);
+    // remove old fill
+    if (_radiusFill != null) {
+      await _controller!.removeFill(_radiusFill!);
+      _radiusFill = null;
     }
 
-    // Add new circle with current radius
-    final filters = ref.read(mapFiltersProvider);
-    _radiusCircle = await _controller!.addCircle(
-      CircleOptions(
-        geometry: _userLocation!,
-        circleRadius: filters.radiusKm * 1000, // Convert km to meters
-        circleColor: '#2196F3',
-        circleOpacity: 0.15,
-        circleStrokeColor: '#2196F3',
-        circleStrokeWidth: 2,
-        circleStrokeOpacity: 0.6,
+    final radiusKm = ref.read(mapFiltersProvider).radiusKm;
+    final polygon = _circlePolygon(_userLocation!, radiusKm * 1000, 96);
+
+    _radiusFill = await _controller!.addFill(
+      FillOptions(
+        geometry: [polygon], // one ring polygon
+        fillColor: '#2196F3',
+        fillOpacity: 0.15,
+        fillOutlineColor: '#2196F3',
       ),
     );
   }
+
+  /// Create a geodesic circle around [center] with [radiusMeters].
+  /// Returns a closed ring (first == last).
+  List<LatLng> _circlePolygon(LatLng center, double radiusMeters, int steps) {
+    const earth = 6378137.0; // meters
+    final lat = _degToRad(center.latitude);
+    final lng = _degToRad(center.longitude);
+    final dByR = radiusMeters / earth;
+
+    final pts = <LatLng>[];
+    for (int i = 0; i <= steps; i++) {
+      final brg = 2 * math.pi * (i / steps); // 0..2π
+      final lat2 = math.asin(
+        math.sin(lat) * math.cos(dByR) +
+            math.cos(lat) * math.sin(dByR) * math.cos(brg),
+      );
+      final lng2 = lng +
+          math.atan2(
+            math.sin(brg) * math.sin(dByR) * math.cos(lat),
+            math.cos(dByR) - math.sin(lat) * math.sin(lat2),
+          );
+      pts.add(LatLng(_radToDeg(lat2), _radToDeg(lng2)));
+    }
+    return pts;
+  }
+
+  double _degToRad(double deg) => deg * (math.pi / 180.0);
+  double _radToDeg(double rad) => rad * (180.0 / math.pi);
+
+  // -------------------- Alerts refresh helper --------------------
+
+  Future<void> _pullAlerts() async {
+    final center = _userLocation ?? _initialCenter;
+    final radiusKm = ref.read(mapFiltersProvider).radiusKm;
+
+    final alerts = await ref.read(nearbyAlertsProvider(
+      {'lat': center.latitude, 'lng': center.longitude, 'radiusKm': radiusKm},
+    ).future);
+    await _syncAlertMarkers(alerts);
+  }
+
+  // -------------------- Bottom sheets --------------------
 
   void _openReportDetails(Report report) {
     showModalBottomSheet<void>(
       context: context,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
       builder: (context) => ReportDetailSheet(report: report),
     );
   }
@@ -213,16 +285,19 @@ class _MapPageState extends ConsumerState<MapPage> {
     showModalBottomSheet<void>(
       context: context,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
       builder: (context) => AlertDetailSheet(alert: alert),
     );
   }
+
+  // -------------------- Build --------------------
 
   @override
   Widget build(BuildContext context) {
     final mapStyleUrl = ref.watch(mapStyleUrlProvider);
     final filters = ref.watch(mapFiltersProvider);
-    final reportsAsync = ref.watch(nearbyReportsProvider);
+    final reportsAsync = ref.watch(mapReportsControllerProvider);
     final permissionAsync = ref.watch(locationPermissionProvider);
 
     final missingKey = mapStyleUrl.contains('YOUR_KEY_HERE');
@@ -234,8 +309,9 @@ class _MapPageState extends ConsumerState<MapPage> {
             child: MaplibreMap(
               styleString: mapStyleUrl,
               initialCameraPosition: CameraPosition(
-                  target: _userLocation ?? _initialCenter,
-                  zoom: 16), // Always use high zoom for user location
+                target: _userLocation ?? _initialCenter,
+                zoom: 15.5,
+              ),
               myLocationEnabled: permissionAsync.value ?? false,
               myLocationTrackingMode: permissionAsync.value == true
                   ? MyLocationTrackingMode.tracking
@@ -247,37 +323,55 @@ class _MapPageState extends ConsumerState<MapPage> {
               trackCameraPosition: true,
               onMapCreated: (controller) async {
                 _controller = controller;
+
                 controller.onSymbolTapped.add((symbol) {
-                  final report = _reportBySymbol[symbol];
-                  final alert = _alertBySymbol[symbol];
-
-                  if (report != null) {
-                    _openReportDetails(report);
-                  } else if (alert != null) {
-                    _openAlertDetails(alert);
+                  if (_reportBySymbol.containsKey(symbol)) {
+                    _openReportDetails(_reportBySymbol[symbol]!);
+                    return;
+                  }
+                  if (_alertBySymbol.containsKey(symbol)) {
+                    _openAlertDetails(_alertBySymbol[symbol]!);
+                    return;
+                  }
+                  final spot = _savedSpotBySymbol[symbol];
+                  if (spot != null) {
+                    showSuccessToast(
+                      context,
+                      '${spot.name}\n${AppLocalizations.current.formatCoordinates(spot.lat, spot.lng)}',
+                    );
                   }
                 });
 
-                // Immediately center to user location when map is created
-                final locationAsync = ref.read(currentLocationProvider);
-                locationAsync.whenData((data) {
-                  if (data != null) {
-                    final target = LatLng(data.latitude!, data.longitude!);
-                    _userLocation = target;
-                    _initialCenter = target;
+                // center to user once map is ready
+                final loc = await ref.read(currentLocationProvider.future);
+                if (loc != null) {
+                  final where = LatLng(loc.latitude!, loc.longitude!);
+                  _userLocation = where;
+                  _initialCenter = where;
+                  await controller.animateCamera(
+                    CameraUpdate.newCameraPosition(
+                      CameraPosition(target: where, zoom: 15.5),
+                    ),
+                  );
+                  await _putUserMarker(where);
+                  await _drawSearchRadius();
+                }
 
-                    // Force camera to user location with higher zoom
-                    controller.animateCamera(CameraUpdate.newCameraPosition(
-                      CameraPosition(target: target, zoom: 16),
-                    ));
+                // kick initial draws
+                final reports =
+                    await ref.read(mapReportsControllerProvider.future);
+                await _syncReportMarkers(reports);
 
-                    _addUserLocationMarker(target);
-                    _updateRadiusCircle();
-                  }
-                });
+                final savedSpots =
+                    await ref.read(accountSavedSpotsProvider.future);
+                await _syncSavedSpotMarkers(savedSpots);
+
+                await _pullAlerts();
               },
             ),
           ),
+
+          // Header + radius selector
           Positioned(
             top: 32,
             left: 16,
@@ -290,6 +384,8 @@ class _MapPageState extends ConsumerState<MapPage> {
               ],
             ),
           ),
+
+          // Bottom controls & legend
           Positioned(
             bottom: 24,
             left: 16,
@@ -304,7 +400,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                         label: 'Filter reports'.tr(),
                         variant: ButtonVariant.secondary,
                         icon: Icons.tune,
-                        onPressed: () => _openFilters(),
+                        onPressed: _openFilters,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -323,25 +419,26 @@ class _MapPageState extends ConsumerState<MapPage> {
               ],
             ),
           ),
+
+          // Recenter FAB
           Positioned(
             right: 16,
             bottom: 160,
             child: FloatingActionButton.small(
               onPressed: () async {
-                final location = await ref.read(currentLocationProvider.future);
-                if (location == null) {
-                  showErrorToast(context,
-                      'Enable location permissions to recenter the map.'.tr());
+                final loc = await ref.read(currentLocationProvider.future);
+                if (loc == null) {
+                  showErrorToast(
+                      context, 'Enable location to recenter the map.'.tr());
                   return;
                 }
-                final target = LatLng(
-                    location.latitude ?? _initialCenter.latitude,
-                    location.longitude ?? _initialCenter.longitude);
+                final target = LatLng(loc.latitude!, loc.longitude!);
                 _controller?.animateCamera(CameraUpdate.newLatLng(target));
               },
               child: const Icon(Icons.my_location_rounded),
             ),
           ),
+
           if (reportsAsync.isLoading && !reportsAsync.hasValue)
             _LoadingOverlay(message: 'Loading nearby reports...'.tr()),
           if (missingKey) const _MissingKeyNotice(),
@@ -356,21 +453,23 @@ class _MapPageState extends ConsumerState<MapPage> {
       isScrollControlled: true,
       useSafeArea: true,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(32))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+      ),
       builder: (context) => const MapFiltersSheet(),
     );
   }
 }
 
+// -------------------- UI bits --------------------
+
 class _RadiusSelector extends ConsumerWidget {
   const _RadiusSelector({required this.selectedRadius});
-
   final double selectedRadius;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final displayValue = selectedRadius.clamp(1, 20);
+    final display = selectedRadius.clamp(1, 20).toDouble();
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -379,9 +478,10 @@ class _RadiusSelector extends ConsumerWidget {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 20,
-              offset: const Offset(0, 10)),
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
         ],
       ),
       child: Column(
@@ -397,18 +497,19 @@ class _RadiusSelector extends ConsumerWidget {
                   min: 1,
                   max: 20,
                   divisions: 19,
-                  value: displayValue.toDouble(),
+                  value: display,
                   label: AppLocalizations.current.translate('{value} km',
-                      params: {'value': displayValue.round().toString()}),
-                  onChanged: (value) =>
-                      ref.read(mapFiltersProvider.notifier).setRadius(value),
+                      params: {'value': display.round().toString()}),
+                  onChanged: (v) =>
+                      ref.read(mapFiltersProvider.notifier).setRadius(v),
                 ),
               ),
               const SizedBox(width: 12),
               Text(
-                  AppLocalizations.current.translate('{value} km',
-                      params: {'value': displayValue.round().toString()}),
-                  style: theme.textTheme.titleMedium),
+                AppLocalizations.current.translate('{value} km',
+                    params: {'value': display.round().toString()}),
+                style: theme.textTheme.titleMedium,
+              ),
             ],
           ),
         ],
@@ -422,7 +523,7 @@ class _MapHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authControllerProvider);
+    final auth = ref.watch(authControllerProvider);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -431,9 +532,10 @@ class _MapHeader extends ConsumerWidget {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.12),
-              blurRadius: 22,
-              offset: const Offset(0, 12)),
+            color: Colors.black.withOpacity(0.12),
+            blurRadius: 22,
+            offset: const Offset(0, 12),
+          ),
         ],
       ),
       child: Column(
@@ -443,7 +545,7 @@ class _MapHeader extends ConsumerWidget {
               style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 8),
           Text(
-            authState.isPendingVerification
+            auth.isPendingVerification
                 ? 'Verification pending. Reporting is locked, but you can explore alerts in your area.'
                     .tr()
                 : 'Stay alert with real-time safety intel from your community.'
@@ -458,7 +560,6 @@ class _MapHeader extends ConsumerWidget {
 
 class _LoadingOverlay extends StatelessWidget {
   const _LoadingOverlay({required this.message});
-
   final String message;
 
   @override
@@ -501,20 +602,19 @@ class _MissingKeyNotice extends StatelessWidget {
         color: Colors.black.withOpacity(0.85),
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Column(
+      child: const Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.key, color: Colors.white),
-          const SizedBox(height: 12),
+          Icon(Icons.key, color: Colors.white),
+          SizedBox(height: 12),
           Text(
-            'MapTiler key missing'.tr(),
-            style: const TextStyle(
+            'MapTiler key missing',
+            style: TextStyle(
                 color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Text(
-            'Run the app with --dart-define=MAPTILER_KEY=YOUR_KEY to enable the live map.'
-                .tr(),
+            'Run the app with --dart-define=MAPTILER_KEY=YOUR_KEY to enable the live map.',
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.white70),
           ),
@@ -526,7 +626,6 @@ class _MissingKeyNotice extends StatelessWidget {
 
 class ReportDetailSheet extends StatelessWidget {
   const ReportDetailSheet({super.key, required this.report});
-
   final Report report;
 
   @override
@@ -542,8 +641,9 @@ class ReportDetailSheet extends StatelessWidget {
             height: 4,
             margin: const EdgeInsets.only(bottom: 16),
             decoration: BoxDecoration(
-                color: Colors.grey.shade400,
-                borderRadius: BorderRadius.circular(8)),
+              color: Colors.grey.shade400,
+              borderRadius: BorderRadius.circular(8),
+            ),
           ),
           Text(report.category, style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 4),

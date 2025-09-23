@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:location/location.dart';
@@ -18,27 +19,26 @@ final locationServiceProvider = Provider<Location>((ref) => Location());
 final locationPermissionProvider =
     FutureProvider.autoDispose<bool>((ref) async {
   final location = ref.watch(locationServiceProvider);
-  bool serviceEnabled = await location.serviceEnabled();
+
+  var serviceEnabled = await location.serviceEnabled();
   if (!serviceEnabled) {
     serviceEnabled = await location.requestService();
-    if (!serviceEnabled) {
-      return false;
-    }
+    if (!serviceEnabled) return false;
   }
 
-  var permissionStatus = await location.hasPermission();
-  if (permissionStatus == PermissionStatus.denied) {
-    permissionStatus = await location.requestPermission();
+  var status = await location.hasPermission();
+  if (status == PermissionStatus.denied) {
+    status = await location.requestPermission();
   }
 
-  return permissionStatus == PermissionStatus.granted ||
-      permissionStatus == PermissionStatus.grantedLimited;
+  return status == PermissionStatus.granted ||
+      status == PermissionStatus.grantedLimited;
 });
 
 final currentLocationProvider =
     FutureProvider.autoDispose<LocationData?>((ref) async {
-  final hasPermission = await ref.watch(locationPermissionProvider.future);
-  if (!hasPermission) return null;
+  final ok = await ref.watch(locationPermissionProvider.future);
+  if (!ok) return null;
   final location = ref.watch(locationServiceProvider);
   return location.getLocation();
 });
@@ -62,21 +62,19 @@ class MapFiltersNotifier extends Notifier<ReportFilters> {
     );
   }
 
-  void setRadius(double radius) {
-    final clamped = radius.clamp(1, 20);
-    state = state.copyWith(radiusKm: clamped.toDouble());
+  void setRadius(double radiusKm) {
+    final clamped = radiusKm.clamp(1, 20).toDouble();
+    state = state.copyWith(radiusKm: clamped);
   }
 
-  void toggleCategory(int categoryId) {
-    final updated = Set<int>.from(state.categoryIds);
-    if (!updated.add(categoryId)) {
-      updated.remove(categoryId);
-    }
-    state = state.copyWith(categoryIds: updated);
+  void toggleCategory(int id) {
+    final next = Set<int>.from(state.categoryIds);
+    if (!next.add(id)) next.remove(id);
+    state = state.copyWith(categoryIds: next);
   }
 
   void clearCategories() {
-    state = state.copyWith(categoryIds: <int>{});
+    state = state.copyWith(categoryIds: const {});
   }
 
   void toggleSavedSpots(bool enabled) {
@@ -85,15 +83,14 @@ class MapFiltersNotifier extends Notifier<ReportFilters> {
 }
 
 final mapStyleUrlProvider = Provider<String>((ref) {
-  final service = ref.watch(mapTilerServiceProvider);
-  return service.styleUrl;
+  final svc = ref.watch(mapTilerServiceProvider);
+  return svc.styleUrl;
 });
 
 /// false = map, true = list
 final mapViewModeProvider =
     NotifierProvider<MapViewModeNotifier, bool>(() => MapViewModeNotifier());
 
-/// Which report is currently selected on the map
 final selectedReportProvider =
     NotifierProvider<SelectedReportNotifier, String?>(
         () => SelectedReportNotifier());
@@ -110,19 +107,14 @@ class MapViewModeNotifier extends Notifier<bool> {
 class SelectedReportNotifier extends Notifier<String?> {
   @override
   String? build() => null;
-
-  void select(String? reportId) => state = reportId;
+  void select(String? id) => state = id;
   void clear() => state = null;
 }
 
-/// -----------------------------------------
-/// Live list of reports for the map (realtime)
-/// -----------------------------------------
-///
-/// - Loads initial batch using your SupabaseReportsService.fetchNearby()
-/// - Subscribes to INSERT on civic_app.reports and adds pins instantly
-/// - RLS controls who receives government-only reports
-///
+/// ----------------------
+/// Live reports controller
+/// ----------------------
+
 final mapReportsControllerProvider =
     AsyncNotifierProvider.autoDispose<MapReportsController, List<Report>>(
         () => MapReportsController());
@@ -130,77 +122,140 @@ final mapReportsControllerProvider =
 class MapReportsController extends AsyncNotifier<List<Report>> {
   sb.RealtimeChannel? _channel;
 
+  // Current query params to keep realtime consistent with the UI.
+  _QueryParams? _params;
+
   @override
   Future<List<Report>> build() async {
-    // Read dependencies for the initial fetch
-    final reportService = ref.read(supabaseReportServiceProvider);
-    final filters = ref.read(mapFiltersProvider);
-    final loc = await ref.read(currentLocationProvider.future);
+    // Re-fetch when filters change
+    ref.listen<ReportFilters>(mapFiltersProvider, (_, __) async {
+      await _reload();
+    });
 
-    const fallbackLat = 24.7136;
-    const fallbackLng = 46.6753;
-    final lat = loc?.latitude ?? fallbackLat;
-    final lng = loc?.longitude ?? fallbackLng;
+    // Re-fetch when location resolves/changes
+    ref.listen<AsyncValue<LocationData?>>(currentLocationProvider,
+        (prev, next) async {
+      final prevLat = prev?.value?.latitude;
+      final prevLng = prev?.value?.longitude;
+      final nextLat = next.hasValue ? next.value?.latitude : null;
+      final nextLng = next.hasValue ? next.value?.longitude : null;
+      if (prevLat != nextLat || prevLng != nextLng) {
+        await _reload();
+      }
+    });
 
-    // Initial list (same as your old nearbyReportsProvider)
-    final initial = await reportService.fetchNearby(
-      lat: lat,
-      lng: lng,
-      radiusKm: filters.radiusKm,
-      categoryIds: filters.categoryIds,
-    );
-
-    // Start realtime after initial fetch
-    _startRealtime();
-
-    // Clean up channel when provider is disposed
+    // Ensure cleanup
     ref.onDispose(() async {
       await _channel?.unsubscribe();
       _channel = null;
     });
 
-    return initial;
+    return _reload();
+  }
+
+  Future<List<Report>> _reload() async {
+    final svc = ref.read(supabaseReportServiceProvider);
+    final filters = ref.read(mapFiltersProvider);
+    final loc = await ref.read(currentLocationProvider.future);
+
+    const fallbackLat = 24.7136;
+    const fallbackLng = 46.6753;
+
+    final lat = (loc?.latitude ?? fallbackLat).toDouble();
+    final lng = (loc?.longitude ?? fallbackLng).toDouble();
+    final radiusKm = filters.radiusKm;
+    final categories = filters.categoryIds;
+
+    _params = _QueryParams(
+      lat: lat,
+      lng: lng,
+      radiusM: (radiusKm * 1000).round(),
+      categoryIds: categories,
+    );
+
+    // Load via RPC in the service (respects radius & categories)
+    final data = await svc.fetchNearby(
+      lat: lat,
+      lng: lng,
+      radiusKm: radiusKm,
+      categoryIds: categories,
+    );
+
+    // Start/refresh realtime after we know params
+    _startRealtime();
+
+    state = AsyncData(data);
+    return data;
   }
 
   void _startRealtime() {
+    // Re-use channel if already active
     if (_channel != null) return;
 
-    final ch = supabase.channel('reports-live');
+    final ch = supabase.channel('realtime:reports');
 
-    ch.onPostgresChanges(
-      event: sb.PostgresChangeEvent.insert,
-      schema: 'civic_app',
-      table: 'reports',
-      callback: (payload) {
-        final row = payload.newRecord;
+    // INSERT / UPDATE: merge if it matches current filters
+    void _upsert(Map<String, dynamic> row) {
+      final r = Report.fromJson(row);
+      final p = _params;
+      if (p == null) return;
 
-        try {
-          // RLS already filtered: non-gov users won't receive gov-only rows.
-          final incoming = Report.fromJson(row);
+      // Client-side guards for the live feed
+      if (!_categoryAllowed(r, p.categoryIds)) return;
+      if (_distanceMeters(p.lat, p.lng, r.lat, r.lng) > p.radiusM + 1) return;
 
-          // Merge into current state (de-dup on id)
-          final cur = state.value ?? const <Report>[];
-          final idx = cur.indexWhere((r) => r.id == incoming.id);
-          if (idx == -1) {
-            state = AsyncData([incoming, ...cur]);
-          } else {
-            final copy = List<Report>.from(cur);
-            copy[idx] = incoming;
-            state = AsyncData(copy);
-          }
-        } catch (e) {
-          // Ignore malformed reports
-          print('Error processing realtime report: $e');
-        }
-      },
-    );
+      final cur = state.value ?? const <Report>[];
+      final idx = cur.indexWhere((e) => e.id == r.id);
+      if (idx == -1) {
+        state = AsyncData([r, ...cur]);
+      } else {
+        final copy = List<Report>.from(cur);
+        copy[idx] = r;
+        state = AsyncData(copy);
+      }
+    }
 
-    ch.subscribe();
+    // DELETE: remove if present
+    void _remove(Map<String, dynamic> row) {
+      final id = (row['report_id'] ?? row['id'] ?? '').toString();
+      final cur = state.value ?? const <Report>[];
+      final next = cur.where((e) => e.id != id).toList(growable: false);
+      if (next.length != cur.length) {
+        state = AsyncData(next);
+      }
+    }
+
+    ch
+      ..onPostgresChanges(
+        event: sb.PostgresChangeEvent.insert,
+        schema: 'civic_app',
+        table: 'reports',
+        callback: (payload) => _upsert(payload.newRecord),
+      )
+      ..onPostgresChanges(
+        event: sb.PostgresChangeEvent.update,
+        schema: 'civic_app',
+        table: 'reports',
+        callback: (payload) => _upsert(payload.newRecord),
+      )
+      ..onPostgresChanges(
+        event: sb.PostgresChangeEvent.delete,
+        schema: 'civic_app',
+        table: 'reports',
+        callback: (payload) => _remove(payload.oldRecord),
+      )
+      ..subscribe();
+
     _channel = ch;
   }
 
-  /// Allow optimistic add from the Report submit flow
+  /// Optional optimistic add from the submit flow
   void addOrReplace(Report r) {
+    final p = _params;
+    if (p != null) {
+      if (!_categoryAllowed(r, p.categoryIds)) return;
+      if (_distanceMeters(p.lat, p.lng, r.lat, r.lng) > p.radiusM + 1) return;
+    }
     final cur = state.value ?? const <Report>[];
     final idx = cur.indexWhere((e) => e.id == r.id);
     if (idx == -1) {
@@ -213,25 +268,70 @@ class MapReportsController extends AsyncNotifier<List<Report>> {
   }
 }
 
-/// -----------------------------------------
-/// (Optional) simple fetch-only list
-/// If you still want the old behavior somewhere else,
-/// keep this provider. Otherwise you can delete it.
-/// -----------------------------------------
+/// ----------------------
+/// (Legacy) fetch-only list
+/// ----------------------
 final nearbyReportsProvider =
     FutureProvider.autoDispose<List<Report>>((ref) async {
-  final reportService = ref.watch(supabaseReportServiceProvider);
+  final svc = ref.watch(supabaseReportServiceProvider);
   final filters = ref.watch(mapFiltersProvider);
-  final locationData = await ref.watch(currentLocationProvider.future);
+  final loc = await ref.watch(currentLocationProvider.future);
+
   const fallbackLat = 24.7136;
   const fallbackLng = 46.6753;
-  final lat = locationData?.latitude ?? fallbackLat;
-  final lng = locationData?.longitude ?? fallbackLng;
 
-  return reportService.fetchNearby(
+  final lat = (loc?.latitude ?? fallbackLat).toDouble();
+  final lng = (loc?.longitude ?? fallbackLng).toDouble();
+
+  return svc.fetchNearby(
     lat: lat,
     lng: lng,
     radiusKm: filters.radiusKm,
     categoryIds: filters.categoryIds,
   );
 });
+
+/// ----------------------
+/// Helpers
+/// ----------------------
+
+class _QueryParams {
+  _QueryParams({
+    required this.lat,
+    required this.lng,
+    required this.radiusM,
+    required this.categoryIds,
+  });
+
+  final double lat;
+  final double lng;
+  final int radiusM;
+  final Set<int> categoryIds;
+}
+
+bool _categoryAllowed(Report r, Set<int> catIds) {
+  if (catIds.isEmpty) return true;
+  final cid = int.tryParse(r.categoryId.toString());
+  return cid != null ? catIds.contains(cid) : true;
+}
+
+/// Haversine distance (meters) – used to filter realtime events client-side
+double _distanceMeters(
+  double lat1,
+  double lon1,
+  double lat2,
+  double lon2,
+) {
+  const R = 6371000.0; // meters
+  final dLat = _deg2rad(lat2 - lat1);
+  final dLon = _deg2rad(lon2 - lon1);
+  final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+      math.cos(_deg2rad(lat1)) *
+          math.cos(_deg2rad(lat2)) *
+          math.sin(dLon / 2) *
+          math.sin(dLon / 2);
+  final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+  return R * c;
+}
+
+double _deg2rad(double x) => x * math.pi / 180.0;
