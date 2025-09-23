@@ -181,4 +181,9 @@ const Map<String, String> arabicLocalizations = {
   'Select a category': 'اختر فئة',
   'Select a sub-category': 'اختر فئة فرعية',
   'Select category first': 'اختر الفئة أولاً',
+  'Report submitted and nearby users have been alerted.':
+      'تم إرسال البلاغ وتنبيه المستخدمين القريبين.',
+  'Failed to notify nearby users.': 'تعذّر تنبيه المستخدمين القريبين.',
+  'A new incident was reported nearby.':
+      'تم الإبلاغ عن حادث جديد بالقرب منك.',
 };

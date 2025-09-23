@@ -117,4 +117,9 @@ const Map<String, String> englishLocalizations = {
   'Select a category': 'Select a category',
   'Select a sub-category': 'Select a sub-category',
   'Select category first': 'Select category first',
+  'Report submitted and nearby users have been alerted.':
+      'Report submitted and nearby users have been alerted.',
+  'Failed to notify nearby users.': 'Failed to notify nearby users.',
+  'A new incident was reported nearby.':
+      'A new incident was reported nearby.',
 };
