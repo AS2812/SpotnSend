@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -25,33 +26,34 @@ class SupabaseUserService {
 
   Future<AppUser> fetchProfile({bool forceRefresh = false}) async {
     if (!forceRefresh && _cachedUser != null) return _cachedUser!;
-    final result = await _client.rpc('profile_me');
 
-    if (result is List && result.isNotEmpty) {
-      final data = result.first as Map<String, dynamic>;
-      final spots = await listSavedSpots();
-      data['favoriteSpots'] = spots.map((e) => e.toJson()).toList();
-      final user = AppUser.fromJson(data);
-      _cachedUser = user;
-      return user;
+    final result = await _callRpc('profile_me');
+    final payload = _unwrapSingleRow(result);
+
+    if (payload == null) {
+      throw const PostgrestException(message: 'No profile data found');
     }
-    throw const PostgrestException(message: 'No profile data found');
+
+    final enriched = await _injectSavedSpots(payload);
+    final user = AppUser.fromJson(enriched);
+    _cachedUser = user;
+    return user;
   }
 
   Future<Result<AppUser>> updateEmail(String email) async {
     try {
-      final result = await _client.rpc('update_profile_email', params: {
+      final result = await _callRpc('update_profile_email', params: {
         'p_email': email,
       });
-      if (result is List && result.isNotEmpty) {
-        final data = result.first as Map<String, dynamic>;
-        final spots = await listSavedSpots();
-        data['favoriteSpots'] = spots.map((e) => e.toJson()).toList();
-        final user = AppUser.fromJson(data);
-        _cachedUser = user;
-        return Success(user);
+      final payload = _unwrapSingleRow(result);
+      if (payload == null) {
+        return const Failure('No profile data returned');
       }
-      return const Failure('No profile data returned');
+
+      final enriched = await _injectSavedSpots(payload);
+      final user = AppUser.fromJson(enriched);
+      _cachedUser = user;
+      return Success(user);
     } on PostgrestException catch (e) {
       return Failure(e.message);
     } catch (e) {
@@ -64,19 +66,19 @@ class SupabaseUserService {
     required String phone,
   }) async {
     try {
-      final result = await _client.rpc('update_profile_phone', params: {
+      final result = await _callRpc('update_profile_phone', params: {
         'p_country': countryCode,
         'p_number': phone,
       });
-      if (result is List && result.isNotEmpty) {
-        final data = result.first as Map<String, dynamic>;
-        final spots = await listSavedSpots();
-        data['favoriteSpots'] = spots.map((e) => e.toJson()).toList();
-        final user = AppUser.fromJson(data);
-        _cachedUser = user;
-        return Success(user);
+      final payload = _unwrapSingleRow(result);
+      if (payload == null) {
+        return const Failure('No profile data returned');
       }
-      return const Failure('No profile data returned');
+
+      final enriched = await _injectSavedSpots(payload);
+      final user = AppUser.fromJson(enriched);
+      _cachedUser = user;
+      return Success(user);
     } on PostgrestException catch (e) {
       return Failure(e.message);
     } catch (e) {
@@ -147,6 +149,41 @@ class SupabaseUserService {
 
   void clearCache() {
     _cachedUser = null;
+  }
+
+  Future<dynamic> _callRpc(String fn,
+      {Map<String, dynamic>? params}) async {
+    try {
+      return await _client.rpc('civic_app.$fn', params: params);
+    } on PostgrestException catch (e) {
+      final message = e.message.toLowerCase();
+      if (message.contains('function') && message.contains('does not exist')) {
+        if (kDebugMode) {
+          debugPrint(
+              'RPC civic_app.$fn not found, retrying without schema prefix');
+        }
+        return _client.rpc(fn, params: params);
+      }
+      rethrow;
+    }
+  }
+
+  Map<String, dynamic>? _unwrapSingleRow(dynamic result) {
+    if (result is Map<String, dynamic>) return result;
+    if (result is List && result.isNotEmpty) {
+      final first = result.first;
+      if (first is Map<String, dynamic>) return first;
+    }
+    return null;
+  }
+
+  Future<Map<String, dynamic>> _injectSavedSpots(
+      Map<String, dynamic> payload) async {
+    final spots = await listSavedSpots();
+    return {
+      ...payload,
+      'favoriteSpots': spots.map((e) => e.toJson()).toList(),
+    };
   }
 }
 
