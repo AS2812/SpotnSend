@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../core/theme/typography.dart';
+import '../../core/theme/typography.dart';
 
 class AppTextField extends StatefulWidget {
   const AppTextField({
@@ -57,7 +57,9 @@ class _AppTextFieldState extends State<AppTextField> {
         prefixIcon: widget.prefix,
         suffixIcon: widget.obscureText
             ? IconButton(
-                icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                icon: Icon(_obscure
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined),
                 onPressed: () => setState(() => _obscure = !_obscure),
               )
             : widget.suffix,

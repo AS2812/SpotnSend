@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:spotnsend/core/utils/validators.dart';
-import 'package:spotnsend/widgets/app_button.dart';
-import 'package:spotnsend/widgets/app_text_field.dart';
-import 'package:spotnsend/widgets/toasts.dart';
+import 'package:spotnsend/shared/widgets/app_button.dart';
+import 'package:spotnsend/shared/widgets/app_text_field.dart';
+import 'package:spotnsend/shared/widgets/toasts.dart';
 import 'package:spotnsend/l10n/app_localizations.dart';
+import 'package:spotnsend/data/services/supabase_bugs_service.dart';
 
 enum BugSeverity { low, medium, high, critical }
 
 class ReportBugPage extends ConsumerStatefulWidget {
   const ReportBugPage({super.key});
-
   @override
   ConsumerState<ReportBugPage> createState() => _ReportBugPageState();
 }
@@ -32,68 +32,52 @@ class _ReportBugPageState extends ConsumerState<ReportBugPage> {
   }
 
   Future<void> _submitBugReport() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
 
-    try {
-      // Simulate API call - replace with actual implementation
-      await Future.delayed(const Duration(seconds: 2));
+    final res = await ref.read(supabaseBugsServiceProvider).submit(
+          title: _titleController.text.trim(),
+          description:
+              '${_descriptionController.text.trim()}\n\nSteps to reproduce:\n${_stepsController.text.trim()}',
+          severity: _severity.name,
+        );
 
-      // TODO: Implement actual bug report submission
-      // final result = await bugReportService.submit(
-      //   title: _titleController.text,
-      //   description: _descriptionController.text,
-      //   steps: _stepsController.text,
-      //   severity: _severity,
-      // );
+    if (!mounted) return;
+    setState(() => _isLoading = false);
 
-      showSuccessToast(
-          context, 'Bug report submitted successfully. Thank you!'.tr());
-      Navigator.of(context).pop();
-    } catch (error) {
-      showErrorToast(
-          context, 'Failed to submit bug report. Please try again.'.tr());
-    } finally {
-      setState(() => _isLoading = false);
-    }
+    res.when(
+      success: (_) {
+        showSuccessToast(
+            context, 'Bug report submitted successfully. Thank you!'.tr());
+        Navigator.of(context).maybePop();
+      },
+      failure: (msg) {
+        showErrorToast(
+            context, msg.isEmpty ? 'Failed to submit bug report'.tr() : msg);
+      },
+    );
   }
 
-  String _getSeverityLabel(BugSeverity severity) {
-    switch (severity) {
-      case BugSeverity.low:
-        return 'Low'.tr();
-      case BugSeverity.medium:
-        return 'Medium'.tr();
-      case BugSeverity.high:
-        return 'High'.tr();
-      case BugSeverity.critical:
-        return 'Critical'.tr();
-    }
-  }
+  String _label(BugSeverity s) => switch (s) {
+        BugSeverity.low => 'Low',
+        BugSeverity.medium => 'Medium',
+        BugSeverity.high => 'High',
+        BugSeverity.critical => 'Critical',
+      }
+          .tr();
 
-  Color _getSeverityColor(BugSeverity severity) {
-    switch (severity) {
-      case BugSeverity.low:
-        return Colors.green;
-      case BugSeverity.medium:
-        return Colors.orange;
-      case BugSeverity.high:
-        return Colors.red;
-      case BugSeverity.critical:
-        return Colors.red.shade900;
-    }
-  }
+  Color _color(BuildContext c, BugSeverity s) => switch (s) {
+        BugSeverity.low => Colors.green,
+        BugSeverity.medium => Colors.orange,
+        BugSeverity.high => Colors.red,
+        BugSeverity.critical => Colors.red.shade900,
+      };
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Report a Bug'.tr()),
-        elevation: 0,
-      ),
+      appBar: AppBar(title: Text('Report a Bug'.tr())),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Form(
@@ -101,7 +85,7 @@ class _ReportBugPageState extends ConsumerState<ReportBugPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Header
+              // header card ...
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -110,19 +94,15 @@ class _ReportBugPageState extends ConsumerState<ReportBugPage> {
                 ),
                 child: Column(
                   children: [
-                    Icon(
-                      Icons.bug_report_rounded,
-                      size: 48,
-                      color: Theme.of(context).colorScheme.error,
-                    ),
+                    Icon(Icons.bug_report_rounded,
+                        size: 48, color: Theme.of(context).colorScheme.error),
                     const SizedBox(height: 12),
-                    Text(
-                      'Help Us Improve SpotnSend'.tr(),
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                      textAlign: TextAlign.center,
-                    ),
+                    Text('Help Us Improve SpotnSend'.tr(),
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleLarge
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                        textAlign: TextAlign.center),
                     const SizedBox(height: 8),
                     Text(
                       'Report bugs to help us make the app better for everyone.'
@@ -135,48 +115,40 @@ class _ReportBugPageState extends ConsumerState<ReportBugPage> {
               ),
               const SizedBox(height: 32),
 
-              // Bug Title
               AppTextField(
                 controller: _titleController,
                 label: 'Bug Title'.tr(),
                 hint: 'Brief description of the issue'.tr(),
-                validator: (value) => validateNotEmpty(context, value,
-                    fieldName: 'Bug Title'.tr()),
+                validator: (v) =>
+                    validateNotEmpty(context, v, fieldName: 'Bug Title'.tr()),
                 textInputAction: TextInputAction.next,
               ),
               const SizedBox(height: 16),
 
-              // Severity Selection
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Severity Level'.tr(),
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                      ),
+                      Text('Severity Level'.tr(),
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleSmall
+                              ?.copyWith(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 12),
                       Wrap(
                         spacing: 8,
-                        children: BugSeverity.values.map((severity) {
-                          final isSelected = _severity == severity;
+                        children: BugSeverity.values.map((s) {
+                          final selected = _severity == s;
+                          final col = _color(context, s);
                           return FilterChip(
-                            selected: isSelected,
-                            label: Text(_getSeverityLabel(severity)),
-                            backgroundColor:
-                                _getSeverityColor(severity).withOpacity(0.1),
-                            selectedColor:
-                                _getSeverityColor(severity).withOpacity(0.3),
-                            checkmarkColor: _getSeverityColor(severity),
-                            onSelected: (selected) {
-                              if (selected) {
-                                setState(() => _severity = severity);
-                              }
-                            },
+                            label: Text(_label(s)),
+                            selected: selected,
+                            onSelected: (v) => setState(() => _severity = s),
+                            backgroundColor: col.withOpacity(0.08),
+                            selectedColor: col.withOpacity(0.22),
+                            checkmarkColor: col,
                           );
                         }).toList(),
                       ),
@@ -186,68 +158,33 @@ class _ReportBugPageState extends ConsumerState<ReportBugPage> {
               ),
               const SizedBox(height: 16),
 
-              // Bug Description
               AppTextField(
                 controller: _descriptionController,
                 label: 'Description'.tr(),
                 hint: 'Describe what happened and what you expected'.tr(),
                 maxLines: 4,
-                validator: (value) => validateNotEmpty(context, value,
-                    fieldName: 'Description'.tr()),
+                validator: (v) =>
+                    validateNotEmpty(context, v, fieldName: 'Description'.tr()),
                 textInputAction: TextInputAction.newline,
               ),
               const SizedBox(height: 16),
 
-              // Steps to Reproduce
               AppTextField(
                 controller: _stepsController,
                 label: 'Steps to Reproduce'.tr(),
                 hint: '1. Open the app\n2. Navigate to...\n3. Click on...'.tr(),
                 maxLines: 4,
-                validator: (value) => validateNotEmpty(context, value,
+                validator: (v) => validateNotEmpty(context, v,
                     fieldName: 'Steps to Reproduce'.tr()),
                 textInputAction: TextInputAction.newline,
               ),
               const SizedBox(height: 32),
 
-              // Submit Button
               AppButton(
                 label: 'Submit Bug Report'.tr(),
                 onPressed: _isLoading ? null : _submitBugReport,
                 loading: _isLoading,
                 icon: Icons.send_rounded,
-              ),
-
-              const SizedBox(height: 16),
-
-              // Contact Info
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceVariant,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.contact_support_rounded,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Need immediate help?'.tr(),
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Contact support at support@spotnsend.com'.tr(),
-                      style: Theme.of(context).textTheme.bodySmall,
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
               ),
             ],
           ),

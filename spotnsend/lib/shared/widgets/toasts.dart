@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../core/theme/colors.dart';
-import '../core/theme/typography.dart';
+import '../../core/theme/colors.dart';
+import '../../core/theme/typography.dart';
 
 void showSuccessToast(BuildContext context, String message) {
   _showToast(context, message, AppColors.success);
@@ -16,7 +16,8 @@ void _showToast(BuildContext context, String message, Color color) {
     ..hideCurrentSnackBar()
     ..showSnackBar(
       SnackBar(
-        content: Text(message, style: AppTypography.bodyMedium.copyWith(color: Colors.white)),
+        content: Text(message,
+            style: AppTypography.bodyMedium.copyWith(color: Colors.white)),
         backgroundColor: color,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:spotnsend/l10n/app_localizations.dart';
 
 class MapLegend extends StatelessWidget {
   const MapLegend({super.key});
@@ -6,8 +7,12 @@ class MapLegend extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final entries = [
-      _LegendEntry(color: const Color(0xFFEB3E50), label: 'Active reports'),
-      _LegendEntry(color: Theme.of(context).colorScheme.primary, label: 'Saved spots'),
+      _LegendEntry(
+          color: const Color(0xFFEB3E50), label: 'Active reports'.tr()),
+      _LegendEntry(color: const Color(0xFFFF9800), label: 'Alerts'.tr()),
+      _LegendEntry(
+          color: Theme.of(context).colorScheme.primary,
+          label: 'Saved spots'.tr()),
     ];
 
     return Container(
@@ -16,7 +21,10 @@ class MapLegend extends StatelessWidget {
         color: Theme.of(context).colorScheme.surface.withOpacity(0.95),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 12, offset: const Offset(0, 6)),
+          BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 12,
+              offset: const Offset(0, 6)),
         ],
       ),
       child: Row(
@@ -28,7 +36,8 @@ class MapLegend extends StatelessWidget {
                   Container(
                     width: 14,
                     height: 14,
-                    decoration: BoxDecoration(color: entry.color, shape: BoxShape.circle),
+                    decoration: BoxDecoration(
+                        color: entry.color, shape: BoxShape.circle),
                   ),
                   const SizedBox(width: 8),
                   Text(entry.label),

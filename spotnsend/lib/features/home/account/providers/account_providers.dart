@@ -1,86 +1,137 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
+import 'package:spotnsend/main.dart';
 import 'package:spotnsend/core/utils/result.dart';
 import 'package:spotnsend/data/models/user_models.dart';
-import 'package:spotnsend/data/services/user_service.dart';
-import 'package:spotnsend/features/auth/providers/auth_providers.dart';
+import 'package:spotnsend/data/services/supabase_user_service.dart';
 
-final accountUserProvider = Provider<AppUser?>((ref) => ref.watch(authControllerProvider).user);
+/// Waits until Supabase has a session (or times out).
+final signedInSessionProvider = FutureProvider<sb.Session?>((ref) async {
+  final cur = supabase.auth.currentSession;
+  if (cur != null) return cur;
 
-final accountSavedSpotsProvider = Provider<List<SavedSpot>>((ref) {
-  final user = ref.watch(accountUserProvider);
-  return user?.savedSpots ?? const [];
+  final completer = Completer<sb.Session?>();
+  late final StreamSubscription sub;
+  sub = supabase.auth.onAuthStateChange.listen((data) {
+    final ev = data.event;
+    if (ev == sb.AuthChangeEvent.signedIn ||
+        ev == sb.AuthChangeEvent.tokenRefreshed) {
+      completer.complete(supabase.auth.currentSession);
+    }
+  });
+
+  try {
+    return await completer.future
+        .timeout(const Duration(seconds: 6), onTimeout: () => null);
+  } finally {
+    await sub.cancel();
+  }
 });
 
+/// Loads the profile. If missing, auto-creates then re-fetches.
+final accountUserProvider = FutureProvider<AppUser?>((ref) async {
+  final session = await ref.watch(signedInSessionProvider.future);
+  if (session == null) return null;
+
+  final svc = ref.read(supabaseUserServiceProvider);
+
+  try {
+    return await svc.fetchProfile(forceRefresh: true);
+  } catch (e) {
+    final u = supabase.auth.currentUser;
+    if (u == null) rethrow;
+
+    try {
+      await supabase.rpc('ensure_profile', params: {
+        'p_username': (u.userMetadata?['username'] as String?) ?? '',
+        'p_full_name':
+            (u.userMetadata?['full_name'] as String?) ?? u.email ?? '',
+        'p_email': u.email ?? '',
+      });
+    } catch (err, st) {
+      if (kDebugMode) {
+        debugPrint('ensure_profile failed: $err');
+        debugPrintStack(stackTrace: st);
+      }
+    }
+
+    return await svc.fetchProfile(forceRefresh: true);
+  }
+});
+
+/// Saved spots list (RLS + DEFAULT user_id = safe).
+final accountSavedSpotsProvider = FutureProvider<List<SavedSpot>>((ref) async {
+  final session = await ref.watch(signedInSessionProvider.future);
+  if (session == null) return const [];
+  final svc = ref.read(supabaseUserServiceProvider);
+  return svc.listSavedSpots();
+});
+
+/// Controller used by the Account screen.
 final accountControllerProvider = Provider<AccountController>((ref) {
-  final userService = ref.watch(userServiceProvider);
-  return AccountController(ref: ref, userService: userService);
+  final svc = ref.read(supabaseUserServiceProvider);
+  return AccountController(ref, svc);
 });
 
 class AccountController {
-  AccountController({required this.ref, required this.userService});
+  AccountController(this._ref, this._svc);
+  final Ref _ref;
+  final SupabaseUserService _svc;
 
-  final Ref ref;
-  final UserService userService;
-
-  Future<void> refresh() async {
-    final user = await userService.me();
-    ref.read(authControllerProvider.notifier).updateUser(user);
-  }
-
-  Future<Result<AppUser>> updateEmail(String email) async {
-    final result = await userService.updateEmail(email);
-    result.when(success: (user) => ref.read(authControllerProvider.notifier).updateUser(user), failure: (_) {});
-    return result;
-  }
-
-  Future<Result<AppUser>> updatePhone(String phoneInput) async {
-    final parts = _parsePhone(phoneInput);
-    final result = await userService.updatePhone(
-      countryCode: parts['countryCode']!,
-      phone: parts['phone']!,
+  Future<Result<void>> updateEmail(String email) async {
+    final r = await _svc.updateEmail(email);
+    return r.when(
+      success: (_) {
+        _ref.invalidate(accountUserProvider);
+        return const Success(null);
+      },
+      failure: (error) => Failure(error),
     );
-    result.when(success: (user) => ref.read(authControllerProvider.notifier).updateUser(user), failure: (_) {});
-    return result;
   }
 
-  Future<Result<AppUser>> addSavedSpot(String name, double lat, double lng) async {
-    final result = await userService.addSavedSpot(name: name, lat: lat, lng: lng);
-    if (result is Success<List<SavedSpot>>) {
-      final user = await userService.refreshCachedUser();
-      ref.read(authControllerProvider.notifier).updateUser(user);
-      return Success(user);
-    }
-    if (result is Failure<List<SavedSpot>>) {
-      return Failure(result.message);
-    }
-    return const Failure<AppUser>('Unable to update saved spots.');
+  Future<Result<void>> updatePhone(String value) async {
+    final parts = value.trim().split(RegExp(r'\s+'));
+    final country = parts.length > 1 ? parts.first : '';
+    final number = parts.length > 1 ? parts.sublist(1).join(' ') : parts.first;
+
+    final r = await _svc.updatePhone(countryCode: country, phone: number);
+    return r.when(
+      success: (_) {
+        _ref.invalidate(accountUserProvider);
+        return const Success(null);
+      },
+      failure: (error) => Failure(error),
+    );
   }
 
-  Future<Result<AppUser>> removeSavedSpot(String id) async {
-    final result = await userService.removeSavedSpot(id);
-    if (result is Success<List<SavedSpot>>) {
-      final user = await userService.refreshCachedUser();
-      ref.read(authControllerProvider.notifier).updateUser(user);
-      return Success(user);
-    }
-    if (result is Failure<List<SavedSpot>>) {
-      return Failure(result.message);
-    }
-    return const Failure<AppUser>('Unable to update saved spots.');
+  Future<Result<void>> addSavedSpot(
+    String name,
+    double lat,
+    double lng,
+  ) async {
+    final r = await _svc.addSavedSpot(name: name, lat: lat, lng: lng);
+    return r.when(
+      success: (_) {
+        _ref.invalidate(accountSavedSpotsProvider);
+        _ref.invalidate(accountUserProvider); // refresh stats too
+        return const Success(null);
+      },
+      failure: (error) => Failure(error),
+    );
   }
 
-  Map<String, String> _parsePhone(String input) {
-    final trimmed = input.trim();
-    final match = RegExp(r'^\+?(\d{1,4})\s*(.*)$').firstMatch(trimmed);
-    if (match == null) {
-      final digitsOnly = trimmed.replaceAll(RegExp(r'[^0-9]'), '');
-      return {'countryCode': '+966', 'phone': digitsOnly};
-    }
-    final code = match.group(1)!;
-    final remainder = match.group(2)!.replaceAll(RegExp(r'[^0-9]'), '');
-    final phone = remainder.isEmpty ? trimmed.replaceAll(RegExp(r'[^0-9]'), '') : remainder;
-    return {'countryCode': '+$code', 'phone': phone};
+  Future<Result<void>> removeSavedSpot(String id) async {
+    final r = await _svc.removeSavedSpot(id);
+    return r.when(
+      success: (_) {
+        _ref.invalidate(accountSavedSpotsProvider);
+        _ref.invalidate(accountUserProvider);
+        return const Success(null);
+      },
+      failure: (error) => Failure(error),
+    );
   }
 }
-

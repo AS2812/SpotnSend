@@ -1,11 +1,11 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:spotnsend/core/utils/formatters.dart';
 import 'package:spotnsend/data/models/report_models.dart';
-import 'package:spotnsend/widgets/app_button.dart';
-import 'package:spotnsend/widgets/empty_state.dart';
+import 'package:spotnsend/shared/widgets/app_button.dart';
+import 'package:spotnsend/shared/widgets/empty_state.dart';
 import 'package:spotnsend/features/home/map/providers/map_providers.dart';
 import 'package:spotnsend/l10n/app_localizations.dart';
 
@@ -35,7 +35,9 @@ class MapListView extends ConsumerWidget {
             return EmptyState(
               icon: Icons.location_off_rounded,
               title: 'No reports in range'.tr(),
-              message: 'Try increasing your radius or adjust filters to see more activity.'.tr(),
+              message:
+                  'Try increasing your radius or adjust filters to see more activity.'
+                      .tr(),
             );
           }
           return ListView.separated(
@@ -48,7 +50,9 @@ class MapListView extends ConsumerWidget {
             },
           );
         },
-        error: (error, _) => Center(child: Text('Failed to load reports: {error}'.tr(params: {'error': '$error'}))),
+        error: (error, _) => Center(
+            child: Text('Failed to load reports: {error}'
+                .tr(params: {'error': '$error'}))),
         loading: () => const Center(child: CircularProgressIndicator()),
       ),
       bottomNavigationBar: SafeArea(
@@ -79,7 +83,10 @@ class _ReportTile extends StatelessWidget {
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 16, offset: const Offset(0, 8)),
+          BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 16,
+              offset: const Offset(0, 8)),
         ],
       ),
       child: Column(
@@ -87,28 +94,32 @@ class _ReportTile extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.report_gmailerrorred_rounded, color: Theme.of(context).colorScheme.primary),
+              Icon(Icons.report_gmailerrorred_rounded,
+                  color: Theme.of(context).colorScheme.primary),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(report.category.tr(), style: Theme.of(context).textTheme.titleLarge),
+                    Text(report.category.tr(),
+                        style: Theme.of(context).textTheme.titleLarge),
                     const SizedBox(height: 4),
-                    Text(report.subcategory.tr(), style: Theme.of(context).textTheme.bodyMedium),
+                    Text(report.subcategory.tr(),
+                        style: Theme.of(context).textTheme.bodyMedium),
                   ],
                 ),
               ),
             ],
           ),
           const SizedBox(height: 16),
-          Text(report.description, style: Theme.of(context).textTheme.bodyLarge),
+          Text(report.description,
+              style: Theme.of(context).textTheme.bodyLarge),
           const SizedBox(height: 16),
           Row(
             children: [
               const Icon(Icons.schedule, size: 16),
               const SizedBox(width: 8),
-              Text(formatDateTime(report.createdAt)),
+              Text(AppFormatters.formatDateTime(report.createdAt)),
             ],
           ),
         ],

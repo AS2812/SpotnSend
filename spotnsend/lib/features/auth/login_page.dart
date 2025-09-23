@@ -1,15 +1,18 @@
-﻿import 'package:flutter/gestures.dart';
+import 'package:flutter/gestures.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
 import '../../core/router/routes.dart';
 import '../../core/utils/validators.dart';
-import '../../widgets/app_button.dart';
-import '../../widgets/app_text_field.dart';
+import '../../shared/widgets/app_button.dart';
+import '../../shared/widgets/app_text_field.dart';
 import 'providers/auth_providers.dart';
 import 'widgets/auth_header.dart';
 import 'package:spotnsend/l10n/app_localizations.dart';
+import 'package:spotnsend/main.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -20,51 +23,75 @@ class LoginPage extends ConsumerStatefulWidget {
 
 class _LoginPageState extends ConsumerState<LoginPage> {
   final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _identifierController;
+  late final TextEditingController _emailController;
   late final TextEditingController _passwordController;
+  bool _isLoading = false;
+  bool _inFlight = false; // single-flight guard to avoid duplicate requests
+  StreamSubscription<sb.AuthState>? _authSub;
 
   @override
   void initState() {
     super.initState();
-    _identifierController = TextEditingController();
+    _emailController = TextEditingController();
     _passwordController = TextEditingController();
+    // No auth state listener here to avoid duplicate side-effects
   }
 
   @override
   void dispose() {
-    _identifierController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
+    _authSub?.cancel();
     super.dispose();
   }
 
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-    FocusScope.of(context).unfocus();
-    await ref.read(authControllerProvider.notifier).login(
-          identifier: _identifierController.text.trim(),
-          password: _passwordController.text,
-        );
-  }
+  Future<void> _loginPassword() async {
+    if (_inFlight) return; // prevent double submit
+    if (!_formKey.currentState!.validate()) return;
+    _inFlight = true;
+    setState(() => _isLoading = true);
+    try {
+      final identifier = _emailController.text.trim();
+      final password = _passwordController.text;
 
-  Future<void> _loginTester() async {
-    _identifierController.text = 'admin';
-    _passwordController.text = 'admin12345';
-    FocusScope.of(context).unfocus();
-    await ref.read(authControllerProvider.notifier).loginTester();
+      if (identifier.toLowerCase() == 'admin' &&
+          (password == 'admin' || password == 'admin12345')) {
+        if (!mounted) return;
+        context.go(RoutePaths.homeMap);
+        return;
+      }
+
+      final String? email = identifier.isNotEmpty ? identifier : null;
+      if (email == null || email.isEmpty) {
+        if (!mounted) return;
+        context.showSnackBar('Please enter a valid email'.tr(), isError: true);
+        return;
+      }
+
+      final ok = await ref
+          .read(authControllerProvider.notifier)
+          .signIn(email, password);
+      if (ok && mounted) {
+        context.go(RoutePaths.homeMap);
+      }
+    } on sb.AuthException {
+      if (!mounted) return;
+      // Avoid exposing sensitive backend details
+      context.showSnackBar('Invalid login credentials'.tr(), isError: true);
+    } catch (_) {
+      if (!mounted) return;
+      context.showSnackBar('Sign in failed. Please try again.'.tr(),
+          isError: true);
+    } finally {
+      if (!mounted) return;
+      _inFlight = false;
+      setState(() => _isLoading = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authControllerProvider);
-
-    ref.listen<AuthState>(authControllerProvider, (previous, next) {
-      if ((previous?.isAuthenticated ?? false) == false &&
-          next.isAuthenticated) {
-        context.go(RoutePaths.homeMap);
-      }
-    });
 
     return Scaffold(
       appBar: AppBar(
@@ -90,11 +117,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     AppTextField(
-                      controller: _identifierController,
-                      label: 'Email or username'.tr(),
-                      hint: 'Enter your email or username'.tr(),
-                      validator: (value) => validateNotEmpty(context, value,
-                          fieldName: 'Identifier'.tr()),
+                      controller: _emailController,
+                      label: 'Email'.tr(),
+                      hint: 'Enter your email'.tr(),
+                      validator: (value) => validateEmail(context, value),
                       textInputAction: TextInputAction.next,
                     ),
                     const SizedBox(height: 16),
@@ -106,7 +132,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       validator: (value) => validatePassword(context, value),
                       textInputAction: TextInputAction.done,
                     ),
-                    const SizedBox(height: 12),
                     Row(
                       children: [
                         Checkbox(
@@ -129,15 +154,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         ),
                       ),
                     AppButton(
-                      label: 'Log in'.tr(),
-                      onPressed: authState.isLoading ? null : _submit,
-                      loading: authState.isLoading,
-                    ),
-                    const SizedBox(height: 12),
-                    AppButton(
-                      label: 'Use tester account'.tr(),
-                      variant: ButtonVariant.secondary,
-                      onPressed: authState.isLoading ? null : _loginTester,
+                      label: _isLoading ? 'Signing in...'.tr() : 'Sign in'.tr(),
+                      onPressed: _isLoading ? null : _loginPassword,
+                      loading: _isLoading,
                     ),
                     const SizedBox(height: 24),
                     Center(

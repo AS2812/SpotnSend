@@ -16,7 +16,7 @@ import 'package:spotnsend/features/home/settings/settings_page.dart';
 import 'package:spotnsend/features/home/shell.dart';
 import 'package:spotnsend/features/legal/terms_conditions_page.dart';
 import 'package:spotnsend/features/legal/user_guide_page.dart';
-import 'package:spotnsend/features/account/change_password_page.dart';
+import 'package:spotnsend/features/home/account/change_password_page.dart';
 import 'package:spotnsend/features/support/report_bug_page.dart';
 import 'routes.dart';
 

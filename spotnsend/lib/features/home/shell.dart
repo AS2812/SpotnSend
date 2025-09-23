@@ -1,9 +1,9 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../widgets/app_badge.dart';
-import '../../widgets/toasts.dart';
+import '../../shared/widgets/app_badge.dart';
+import '../../shared/widgets/toasts.dart';
 import '../auth/providers/auth_providers.dart';
 import 'package:spotnsend/l10n/app_localizations.dart';
 

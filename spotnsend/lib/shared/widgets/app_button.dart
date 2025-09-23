@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../core/theme/colors.dart';
-import '../core/theme/gradients.dart';
-import '../core/theme/typography.dart';
+import '../../core/theme/colors.dart';
+import '../../core/theme/gradients.dart';
+import '../../core/theme/typography.dart';
 
 class AppButton extends StatelessWidget {
   const AppButton({
@@ -29,7 +29,10 @@ class AppButton extends StatelessWidget {
             width: 20,
             height: 20,
             child: CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(variant == ButtonVariant.primary ? Colors.white : AppColors.primaryBlue),
+              valueColor: AlwaysStoppedAnimation<Color>(
+                  variant == ButtonVariant.primary
+                      ? Colors.white
+                      : AppColors.primaryBlue),
               strokeWidth: 2.2,
             ),
           )
@@ -44,7 +47,9 @@ class AppButton extends StatelessWidget {
               Text(
                 label,
                 style: AppTypography.bodyLarge.copyWith(
-                  color: variant == ButtonVariant.primary ? AppColors.white : AppColors.primaryBlue,
+                  color: variant == ButtonVariant.primary
+                      ? AppColors.white
+                      : AppColors.primaryBlue,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -65,7 +70,8 @@ class AppButton extends StatelessWidget {
               disabledBackgroundColor: AppColors.grey.withOpacity(0.3),
               shadowColor: Colors.transparent,
               fixedSize: const Size.fromHeight(54),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18)),
             ),
             child: child,
           ),
@@ -77,7 +83,8 @@ class AppButton extends StatelessWidget {
             foregroundColor: AppColors.primaryBlue,
             side: const BorderSide(color: AppColors.primaryBlue, width: 1.4),
             fixedSize: const Size.fromHeight(54),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
           ),
           child: child,
         );

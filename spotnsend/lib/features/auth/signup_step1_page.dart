@@ -1,14 +1,13 @@
-﻿import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:spotnsend/data/models/auth_models.dart';
 
 import '../../core/router/routes.dart';
 import '../../core/utils/validators.dart';
-import '../../widgets/app_button.dart';
-import '../../widgets/app_text_field.dart';
-import '../../widgets/toasts.dart';
+import '../../shared/widgets/app_button.dart';
+import '../../shared/widgets/app_text_field.dart';
+import '../../shared/widgets/toasts.dart';
 import 'providers/auth_providers.dart';
 import 'widgets/auth_header.dart';
 import 'package:spotnsend/l10n/app_localizations.dart';
@@ -24,7 +23,6 @@ class _SignupStep1PageState extends ConsumerState<SignupStep1Page> {
   final _formKey = GlobalKey<FormState>();
 
   late final TextEditingController _fullNameController;
-  late final TextEditingController _usernameController;
   late final TextEditingController _emailController;
   late final TextEditingController _phoneController;
   late final TextEditingController _passwordController;
@@ -34,7 +32,6 @@ class _SignupStep1PageState extends ConsumerState<SignupStep1Page> {
   void initState() {
     super.initState();
     _fullNameController = TextEditingController();
-    _usernameController = TextEditingController();
     _emailController = TextEditingController();
     _phoneController = TextEditingController();
     _passwordController = TextEditingController();
@@ -44,7 +41,6 @@ class _SignupStep1PageState extends ConsumerState<SignupStep1Page> {
   @override
   void dispose() {
     _fullNameController.dispose();
-    _usernameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
     _passwordController.dispose();
@@ -57,16 +53,14 @@ class _SignupStep1PageState extends ConsumerState<SignupStep1Page> {
       return;
     }
 
-    await ref.read(authControllerProvider.notifier).signupStep1(
-          SignupStep1Data(
-            fullName: _fullNameController.text.trim(),
-            username: _usernameController.text.trim(),
-            email: _emailController.text.trim(),
-            phone: _phoneController.text.trim(),
-            password: _passwordController.text,
-            otp: _otpController.text.trim(),
-          ),
-        );
+    await ref.read(authControllerProvider.notifier).signupStep1({
+      'fullName': _fullNameController.text.trim(),
+      'email': _emailController.text.trim(),
+      'phoneCountryCode': '+966',
+      'phoneNumber': _phoneController.text.trim(),
+      'password': _passwordController.text,
+      'otp': _otpController.text.trim(),
+    });
 
     final state = ref.read(authControllerProvider);
     if (mounted && state.error == null) {
@@ -90,7 +84,8 @@ class _SignupStep1PageState extends ConsumerState<SignupStep1Page> {
           children: [
             AuthGradientHeader(
               title: 'Create your SpotnSend account'.tr(),
-              subtitle: 'We need a few details to set up your secure profile.'.tr(),
+              subtitle:
+                  'We need a few details to set up your secure profile.'.tr(),
             ),
             Padding(
               padding: const EdgeInsets.all(24),
@@ -102,14 +97,8 @@ class _SignupStep1PageState extends ConsumerState<SignupStep1Page> {
                     AppTextField(
                       controller: _fullNameController,
                       label: 'Full name'.tr(),
-                      validator: (value) => validateNotEmpty(context, value, fieldName: 'Full name'.tr()),
-                      textInputAction: TextInputAction.next,
-                    ),
-                    const SizedBox(height: 16),
-                    AppTextField(
-                      controller: _usernameController,
-                      label: 'Username'.tr(),
-                      validator: (value) => validateNotEmpty(context, value, fieldName: 'Username'.tr()),
+                      validator: (value) => validateNotEmpty(context, value,
+                          fieldName: 'Full name'.tr()),
                       textInputAction: TextInputAction.next,
                     ),
                     const SizedBox(height: 16),
@@ -162,8 +151,12 @@ class _SignupStep1PageState extends ConsumerState<SignupStep1Page> {
                               style: Theme.of(context)
                                   .textTheme
                                   .bodyMedium
-                                  ?.copyWith(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w700),
-                              recognizer: TapGestureRecognizer()..onTap = () => context.go(RoutePaths.login),
+                                  ?.copyWith(
+                                      color:
+                                          Theme.of(context).colorScheme.primary,
+                                      fontWeight: FontWeight.w700),
+                              recognizer: TapGestureRecognizer()
+                                ..onTap = () => context.go(RoutePaths.login),
                             ),
                           ],
                         ),

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:location/location.dart';
@@ -7,9 +7,12 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:spotnsend/core/utils/formatters.dart';
 import 'package:spotnsend/data/models/report_models.dart';
 import 'package:spotnsend/features/auth/providers/auth_providers.dart';
-import 'package:spotnsend/widgets/app_button.dart';
-import 'package:spotnsend/widgets/toasts.dart';
+import 'package:spotnsend/shared/widgets/app_button.dart';
+import 'package:spotnsend/shared/widgets/toasts.dart';
 import 'package:spotnsend/features/home/map/providers/map_providers.dart';
+import 'package:spotnsend/features/home/map/providers/alerts_providers.dart';
+import 'package:spotnsend/data/models/alert_models.dart';
+import 'package:spotnsend/features/home/map/widgets/alert_detail_sheet.dart';
 import 'package:spotnsend/features/home/map/widgets/filters_sheet.dart';
 import 'package:spotnsend/features/home/map/widgets/legend.dart';
 import 'package:spotnsend/l10n/app_localizations.dart';
@@ -23,9 +26,9 @@ class MapPage extends ConsumerStatefulWidget {
 
 class _MapPageState extends ConsumerState<MapPage> {
   MaplibreMapController? _controller;
-  final Map<String, Report> _reportBySymbol = {};
+  final Map<Symbol, Report> _reportBySymbol = {};
+  final Map<Symbol, Alert> _alertBySymbol = {};
   LatLng _initialCenter = const LatLng(24.7136, 46.6753);
-  final double _initialZoom = 14; // Closer zoom for better user location view
   Circle? _radiusCircle;
   LatLng? _userLocation;
   Symbol? _userLocationMarker;
@@ -57,7 +60,17 @@ class _MapPageState extends ConsumerState<MapPage> {
 
       ref.listen<AsyncValue<List<Report>>>(nearbyReportsProvider,
           (previous, next) {
-        next.whenOrNull(data: (reports) => _syncMarkers(reports));
+        next.whenOrNull(data: (reports) => _syncReportMarkers(reports));
+      });
+
+      // Listen to alerts
+      ref.listen<AsyncValue<List<Alert>>>(
+          nearbyAlertsProvider({
+            'lat': _userLocation?.latitude ?? _initialCenter.latitude,
+            'lng': _userLocation?.longitude ?? _initialCenter.longitude,
+            'radiusKm': 10.0,
+          }), (previous, next) {
+        next.whenOrNull(data: (alerts) => _syncAlertMarkers(alerts));
       });
 
       // Listen to radius changes to update circle
@@ -69,22 +82,68 @@ class _MapPageState extends ConsumerState<MapPage> {
     });
   }
 
-  Future<void> _syncMarkers(List<Report> reports) async {
+  Future<void> _syncReportMarkers(List<Report> reports) async {
     if (_controller == null) {
       return;
     }
-    await _controller!.clearSymbols();
+
+    // Clear only report markers
+    for (final symbol in _reportBySymbol.keys) {
+      await _controller!.removeSymbol(symbol);
+    }
     _reportBySymbol.clear();
+
     for (final report in reports) {
       final symbol = await _controller!.addSymbol(
         SymbolOptions(
           geometry: LatLng(report.lat, report.lng),
           iconImage: 'marker-15',
-          iconColor: '#EB3E50',
+          iconColor: '#EB3E50', // Red for reports
           iconSize: 1.4,
         ),
       );
-      _reportBySymbol[symbol.id] = report;
+      _reportBySymbol[symbol] = report;
+    }
+  }
+
+  Future<void> _syncAlertMarkers(List<Alert> alerts) async {
+    if (_controller == null) {
+      return;
+    }
+
+    // Clear only alert markers
+    for (final symbol in _alertBySymbol.keys) {
+      await _controller!.removeSymbol(symbol);
+    }
+    _alertBySymbol.clear();
+
+    for (final alert in alerts) {
+      // Different colors based on severity
+      String color = '#FF9800'; // Orange for medium
+      switch (alert.severity) {
+        case AlertSeverity.low:
+          color = '#4CAF50'; // Green
+          break;
+        case AlertSeverity.medium:
+          color = '#FF9800'; // Orange
+          break;
+        case AlertSeverity.high:
+          color = '#F44336'; // Red
+          break;
+        case AlertSeverity.critical:
+          color = '#9C27B0'; // Purple
+          break;
+      }
+
+      final symbol = await _controller!.addSymbol(
+        SymbolOptions(
+          geometry: LatLng(alert.latitude, alert.longitude),
+          iconImage: 'marker-15',
+          iconColor: color,
+          iconSize: 1.8, // Slightly larger than reports
+        ),
+      );
+      _alertBySymbol[symbol] = alert;
     }
   }
 
@@ -150,6 +209,15 @@ class _MapPageState extends ConsumerState<MapPage> {
     );
   }
 
+  void _openAlertDetails(Alert alert) {
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      builder: (context) => AlertDetailSheet(alert: alert),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final mapStyleUrl = ref.watch(mapStyleUrlProvider);
@@ -180,9 +248,13 @@ class _MapPageState extends ConsumerState<MapPage> {
               onMapCreated: (controller) async {
                 _controller = controller;
                 controller.onSymbolTapped.add((symbol) {
-                  final report = _reportBySymbol[symbol.id];
+                  final report = _reportBySymbol[symbol];
+                  final alert = _alertBySymbol[symbol];
+
                   if (report != null) {
                     _openReportDetails(report);
+                  } else if (alert != null) {
+                    _openAlertDetails(alert);
                   }
                 });
 
@@ -485,7 +557,7 @@ class ReportDetailSheet extends StatelessWidget {
             children: [
               const Icon(Icons.schedule, size: 16),
               const SizedBox(width: 8),
-              Text(formatDateTime(report.createdAt)),
+              Text(AppFormatters.formatDateTime(report.createdAt)),
             ],
           ),
           if (report.mediaUrls.isNotEmpty) ...[

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
-import '../core/theme/colors.dart';
-import '../core/theme/typography.dart';
+import '../../core/theme/colors.dart';
+import '../../core/theme/typography.dart';
 
 enum BadgeVariant { pending, verified, warning }
 
 class AppBadge extends StatelessWidget {
-  const AppBadge({super.key, required this.label, this.variant = BadgeVariant.pending});
+  const AppBadge(
+      {super.key, required this.label, this.variant = BadgeVariant.pending});
 
   final String label;
   final BadgeVariant variant;
@@ -23,14 +24,18 @@ class AppBadge extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: AppTypography.bodySmall.copyWith(color: colors.foreground, fontWeight: FontWeight.w700),
+        style: AppTypography.bodySmall
+            .copyWith(color: colors.foreground, fontWeight: FontWeight.w700),
       ),
     );
   }
 }
 
 class _BadgeColors {
-  const _BadgeColors({required this.background, required this.foreground, required this.border});
+  const _BadgeColors(
+      {required this.background,
+      required this.foreground,
+      required this.border});
 
   final Color background;
   final Color foreground;

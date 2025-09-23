@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../core/theme/typography.dart';
+import '../../core/theme/typography.dart';
 import 'app_button.dart';
 
 Future<bool?> showConfirmDialog({
@@ -14,7 +14,9 @@ Future<bool?> showConfirmDialog({
   return showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: Text(title, style: AppTypography.headingSmall.copyWith(color: Theme.of(context).colorScheme.primary)),
+      title: Text(title,
+          style: AppTypography.headingSmall
+              .copyWith(color: Theme.of(context).colorScheme.primary)),
       content: Text(message, style: AppTypography.bodyMedium),
       actions: [
         AppButton(
@@ -31,4 +33,3 @@ Future<bool?> showConfirmDialog({
     ),
   );
 }
-

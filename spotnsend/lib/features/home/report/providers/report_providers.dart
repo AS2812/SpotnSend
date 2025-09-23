@@ -2,44 +2,44 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:spotnsend/core/utils/result.dart';
 import 'package:spotnsend/data/models/report_models.dart';
-import 'package:spotnsend/data/services/report_service.dart';
-import 'package:spotnsend/features/auth/providers/auth_providers.dart';
+import 'package:spotnsend/data/models/user_models.dart';
+import 'package:spotnsend/data/services/supabase_reports_service.dart';
+import 'package:spotnsend/data/services/supabase_user_service.dart';
+import 'package:spotnsend/features/home/account/providers/account_providers.dart';
 
-final reportCategoriesProvider = Provider<List<ReportCategory>>((ref) {
-  final service = ref.watch(reportServiceProvider);
-  return service.categories;
+/// =============== Data sources ===============
+
+final reportCategoriesProvider =
+    FutureProvider<List<ReportCategory>>((ref) async {
+  final svc = ref.watch(supabaseReportServiceProvider);
+  return svc.loadCategories();
 });
 
+/// Currently selected category (derived from form state + categories)
 final selectedCategoryProvider = Provider<ReportCategory?>((ref) {
-  final formState = ref.watch(reportFormProvider);
-  final categories = ref.watch(reportCategoriesProvider);
+  final form = ref.watch(reportFormProvider);
+  final cats = ref.watch(reportCategoriesProvider);
 
-  if (formState.categoryId != null && categories.isNotEmpty) {
-    try {
-      return categories.firstWhere((cat) => cat.id == formState.categoryId);
-    } catch (e) {
-      return categories.first;
-    }
-  }
-
-  return null;
+  return cats.maybeWhen(
+    data: (list) {
+      if (form.categoryId == null) return null;
+      try {
+        return list.firstWhere((c) => c.id == form.categoryId);
+      } catch (_) {
+        return null;
+      }
+    },
+    orElse: () => null,
+  );
 });
 
+/// Subcategories for the selected category
 final reportSubcategoriesProvider = Provider<List<ReportSubcategory>>((ref) {
-  final formState = ref.watch(reportFormProvider);
-  final categories = ref.watch(reportCategoriesProvider);
-
-  // Find category by ID from form state
-  if (formState.categoryId != null) {
-    final category = categories.firstWhere(
-      (cat) => cat.id == formState.categoryId,
-      orElse: () => categories.first,
-    );
-    return category.subcategories;
-  }
-
-  return [];
+  final selected = ref.watch(selectedCategoryProvider);
+  return selected?.subcategories ?? const <ReportSubcategory>[];
 });
+
+/// =============== Form state ===============
 
 final reportFormProvider =
     NotifierProvider<ReportFormNotifier, ReportFormData>(() {
@@ -48,48 +48,31 @@ final reportFormProvider =
 
 class ReportFormNotifier extends Notifier<ReportFormData> {
   @override
-  ReportFormData build() {
-    return ReportFormData();
-  }
+  ReportFormData build() => ReportFormData();
 
-  void updateCategory(ReportCategory? category) {
+  void setCategory(ReportCategory? category) {
     state = state.copyWith(
       categoryId: category?.id,
       categoryName: category?.name,
-      // Reset subcategory when category changes
+      // reset subcategory when category changes
       subcategoryId: null,
       subcategoryName: null,
     );
   }
 
-  void updateSubcategory(ReportSubcategory? subcategory) {
+  void setSubcategory(ReportSubcategory? sub) {
     state = state.copyWith(
-      subcategoryId: subcategory?.id,
-      subcategoryName: subcategory?.name,
+      subcategoryId: sub?.id,
+      subcategoryName: sub?.name,
     );
   }
 
-  void updateLocation(double? lat, double? lng) {
-    state = state.copyWith(
-      selectedLat: lat,
-      selectedLng: lng,
-    );
+  void setDescription(String value) {
+    state = state.copyWith(description: value);
   }
 
-  void updateDescription(String description) {
-    state = state.copyWith(description: description);
-  }
-
-  void setAudience(ReportAudience audience) {
-    state = state.copyWith(audience: audience);
-  }
-
-  void toggleAudience(ReportAudience audience) {
-    state = state.copyWith(audience: audience);
-  }
-
-  void setCurrentLocation(bool value) {
-    state = state.copyWith(useCurrentLocation: value);
+  void setAudience(ReportAudience value) {
+    state = state.copyWith(audience: value);
   }
 
   void setUseCurrentLocation(bool value) {
@@ -100,33 +83,61 @@ class ReportFormNotifier extends Notifier<ReportFormData> {
     state = state.copyWith(selectedLat: lat, selectedLng: lng);
   }
 
-  void setAgreedToTerms(bool agreed) {
-    state = state.copyWith(agreedToTerms: agreed);
+  void setAgreedToTerms(bool value) {
+    state = state.copyWith(agreedToTerms: value);
   }
 
-  void setAgreement(bool agreed) {
-    state = state.copyWith(agreedToTerms: agreed);
+  void setMedia(List<String> paths) {
+    state = state.copyWith(mediaPaths: paths);
   }
 
-  void setMedia(List<String> mediaPaths) {
-    state = state.copyWith(mediaPaths: mediaPaths);
+  void setRadiusKm(double radiusKm) {
+    state = state.copyWith(radiusKm: radiusKm);
   }
 
-  void reset() {
-    state = ReportFormData();
-  }
+  void reset() => state = ReportFormData();
 
-  Future<Result<Report>> submit() async {
-    final authState = ref.read(authControllerProvider);
-    final user = authState.user;
-    if (user == null)
+  /// Convenience: submit the *current* form via the controller.
+  Future<Result<Report>> submit(WidgetRef ref) async {
+    final user = await ref.read(accountUserProvider.future);
+    if (user == null) {
       return const Failure('You must be logged in to submit a report.');
-
-    final reportService = ref.read(reportServiceProvider);
-    final result = await reportService.submit(formData: state, user: user);
-    if (result is Success) {
-      reset();
     }
-    return result;
+    final ctrl = ref.read(reportControllerProvider);
+    final res = await ctrl.submit(state, user);
+    return res.when(
+      success: (report) {
+        reset();
+        return Success(report);
+      },
+      failure: Failure.new,
+    );
+  }
+}
+
+/// =============== Submit controller ===============
+
+final reportControllerProvider = Provider<ReportController>((ref) {
+  final svc = ref.read(supabaseReportServiceProvider);
+  return ReportController(ref, svc);
+});
+
+class ReportController {
+  ReportController(this.ref, this._svc);
+  final Ref ref;
+  final SupabaseReportService _svc;
+
+  /// Submits a report, refreshes profile counters on success.
+  Future<Result<Report>> submit(ReportFormData form, AppUser user) async {
+    final res = await _svc.submit(formData: form, user: user);
+    return res.when(
+      success: (report) {
+        // Refresh account counters immediately after a successful submit
+        ref.read(supabaseUserServiceProvider).clearCache();
+        ref.invalidate(accountUserProvider);
+        return Success(report);
+      },
+      failure: (msg) => Failure(msg),
+    );
   }
 }

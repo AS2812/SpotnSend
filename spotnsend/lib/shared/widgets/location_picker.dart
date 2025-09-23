@@ -4,7 +4,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 
 import 'package:spotnsend/features/home/map/providers/map_providers.dart';
 import 'package:spotnsend/l10n/app_localizations.dart';
-import 'package:spotnsend/widgets/app_button.dart';
+import 'package:spotnsend/shared/widgets/app_button.dart';
 
 class LocationPicker extends ConsumerStatefulWidget {
   const LocationPicker({

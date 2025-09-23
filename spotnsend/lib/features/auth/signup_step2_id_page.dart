@@ -1,14 +1,13 @@
-﻿import 'package:file_picker/file_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:spotnsend/data/models/auth_models.dart';
 
 import '../../core/router/routes.dart';
 import '../../core/utils/validators.dart';
-import '../../widgets/app_button.dart';
-import '../../widgets/app_text_field.dart';
-import '../../widgets/toasts.dart';
+import '../../shared/widgets/app_button.dart';
+import '../../shared/widgets/app_text_field.dart';
+import '../../shared/widgets/toasts.dart';
 import 'providers/auth_providers.dart';
 import 'widgets/auth_header.dart';
 import 'package:spotnsend/l10n/app_localizations.dart';
@@ -39,7 +38,8 @@ class _SignupStep2IdPageState extends ConsumerState<SignupStep2IdPage> {
   }
 
   Future<void> _pickFile(bool isFront) async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.image, allowMultiple: false);
+    final result = await FilePicker.platform
+        .pickFiles(type: FileType.image, allowMultiple: false);
     if (result != null && result.files.single.path != null) {
       setState(() {
         if (isFront) {
@@ -61,13 +61,11 @@ class _SignupStep2IdPageState extends ConsumerState<SignupStep2IdPage> {
       return;
     }
 
-    await ref.read(authControllerProvider.notifier).signupStep2(
-          SignupStep2Data(
-            idNumber: _idNumberController.text.trim(),
-            frontIdPath: _frontPath!,
-            backIdPath: _backPath!,
-          ),
-        );
+    await ref.read(authControllerProvider.notifier).signupStep2({
+      'idNumber': _idNumberController.text.trim(),
+      'frontIdPath': _frontPath!,
+      'backIdPath': _backPath!,
+    });
 
     final state = ref.read(authControllerProvider);
     if (mounted && state.error == null) {
@@ -91,7 +89,9 @@ class _SignupStep2IdPageState extends ConsumerState<SignupStep2IdPage> {
           children: [
             AuthGradientHeader(
               title: 'Verify your identity'.tr(),
-              subtitle: 'Upload your national ID so we can keep reporting trusted.'.tr(),
+              subtitle:
+                  'Upload your national ID so we can keep reporting trusted.'
+                      .tr(),
             ),
             Padding(
               padding: const EdgeInsets.all(24),
@@ -104,18 +104,21 @@ class _SignupStep2IdPageState extends ConsumerState<SignupStep2IdPage> {
                       controller: _idNumberController,
                       label: 'National ID number'.tr(),
                       keyboardType: TextInputType.number,
-                      validator: (value) => validateNotEmpty(context, value, fieldName: 'National ID number'.tr()),
+                      validator: (value) => validateNotEmpty(context, value,
+                          fieldName: 'National ID number'.tr()),
                     ),
                     const SizedBox(height: 24),
                     _UploadTile(
                       title: 'Front of ID'.tr(),
-                      subtitle: _frontPath ?? 'Upload a clear image of the front side'.tr(),
+                      subtitle: _frontPath ??
+                          'Upload a clear image of the front side'.tr(),
                       onTap: () => _pickFile(true),
                     ),
                     const SizedBox(height: 16),
                     _UploadTile(
                       title: 'Back of ID'.tr(),
-                      subtitle: _backPath ?? 'Upload a clear image of the back side'.tr(),
+                      subtitle: _backPath ??
+                          'Upload a clear image of the back side'.tr(),
                       onTap: () => _pickFile(false),
                     ),
                     const SizedBox(height: 32),
@@ -142,7 +145,8 @@ class _SignupStep2IdPageState extends ConsumerState<SignupStep2IdPage> {
 }
 
 class _UploadTile extends StatelessWidget {
-  const _UploadTile({required this.title, required this.subtitle, required this.onTap});
+  const _UploadTile(
+      {required this.title, required this.subtitle, required this.onTap});
 
   final String title;
   final String subtitle;
@@ -158,11 +162,13 @@ class _UploadTile extends StatelessWidget {
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.15)),
+          border: Border.all(
+              color: Theme.of(context).colorScheme.primary.withOpacity(0.15)),
         ),
         child: Row(
           children: [
-            Icon(Icons.upload_file_rounded, color: Theme.of(context).colorScheme.primary),
+            Icon(Icons.upload_file_rounded,
+                color: Theme.of(context).colorScheme.primary),
             const SizedBox(width: 16),
             Expanded(
               child: Column(

@@ -1,14 +1,13 @@
-﻿import 'package:file_picker/file_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:go_router/go_router.dart';
 import 'package:spotnsend/core/router/routes.dart';
 import 'package:spotnsend/data/models/report_models.dart';
-import 'package:spotnsend/widgets/app_button.dart';
-import 'package:spotnsend/widgets/confirm_dialog.dart';
-import 'package:spotnsend/core/utils/validators.dart';
-import 'package:spotnsend/widgets/toasts.dart';
+import 'package:spotnsend/shared/widgets/app_button.dart';
+import 'package:spotnsend/shared/widgets/confirm_dialog.dart';
+import 'package:spotnsend/shared/widgets/toasts.dart';
 import 'package:spotnsend/features/auth/providers/auth_providers.dart';
 import 'package:spotnsend/features/home/map/providers/map_providers.dart';
 import 'package:spotnsend/features/home/report/providers/report_providers.dart';
@@ -24,6 +23,15 @@ class ReportPage extends ConsumerStatefulWidget {
 class _ReportPageState extends ConsumerState<ReportPage> {
   final _formKey = GlobalKey<FormState>();
   final _descriptionController = TextEditingController();
+
+  String _humanize(String value) {
+    if (value.isEmpty) return value;
+    final withSpaces = value.replaceAll('_', ' ').toLowerCase();
+    return withSpaces
+        .split(' ')
+        .map((w) => w.isEmpty ? w : (w[0].toUpperCase() + w.substring(1)))
+        .join(' ');
+  }
 
   @override
   void dispose() {
@@ -68,7 +76,7 @@ class _ReportPageState extends ConsumerState<ReportPage> {
       return;
     }
 
-    final result = await ref.read(reportFormProvider.notifier).submit();
+    final result = await ref.read(reportFormProvider.notifier).submit(ref);
     result.when(
       success: (report) {
         showSuccessToast(
@@ -87,8 +95,7 @@ class _ReportPageState extends ConsumerState<ReportPage> {
     }
 
     final formState = ref.watch(reportFormProvider);
-    final categories = ref.watch(reportCategoriesProvider);
-    final subcategories = ref.watch(reportSubcategoriesProvider);
+    final categoriesAsync = ref.watch(reportCategoriesProvider);
 
     return Scaffold(
       appBar: AppBar(title: Text('Submit a report'.tr())),
@@ -97,59 +104,69 @@ class _ReportPageState extends ConsumerState<ReportPage> {
         child: ListView(
           padding: const EdgeInsets.all(24),
           children: [
-            DropdownButtonFormField<int>(
-              decoration: InputDecoration(labelText: 'Category'.tr()),
-              value: formState.categoryId,
-              items: [
-                for (final category in categories)
-                  DropdownMenuItem<int>(
-                      value: category.id, child: Text(category.name.tr())),
-              ],
-              onChanged: (value) {
-                if (value == null) {
-                  ref.read(reportFormProvider.notifier).updateCategory(null);
-                  return;
-                }
-                final selected =
-                    categories.firstWhere((category) => category.id == value);
-                ref.read(reportFormProvider.notifier).updateCategory(selected);
-              },
-              validator: (value) =>
-                  value == null ? 'Select a category'.tr() : null,
+            categoriesAsync.when(
+              data: (categories) => DropdownButtonFormField<int>(
+                decoration: InputDecoration(labelText: 'Category'.tr()),
+                isExpanded: true,
+                value: formState.categoryId,
+                items: [
+                  for (final category in categories)
+                    DropdownMenuItem<int>(
+                        value: category.id,
+                        child: Text(_humanize(category.name).tr())),
+                ],
+                onChanged: (value) {
+                  if (value == null) {
+                    ref.read(reportFormProvider.notifier).setCategory(null);
+                    return;
+                  }
+                  final selected =
+                      categories.firstWhere((category) => category.id == value);
+                  ref.read(reportFormProvider.notifier).setCategory(selected);
+                },
+                validator: (value) =>
+                    value == null ? 'Select a category'.tr() : null,
+              ),
+              loading: () => const SizedBox.shrink(),
+              error: (_, __) => const SizedBox.shrink(),
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<int>(
               decoration: InputDecoration(labelText: 'Sub-category'.tr()),
-              value: subcategories
+              isExpanded: true,
+              value: ref
+                      .watch(reportSubcategoriesProvider)
                       .any((sub) => sub.id == formState.subcategoryId)
                   ? formState.subcategoryId
                   : null, // Reset value if it doesn't exist in current subcategories
-              items: subcategories.isEmpty
+              items: ref.watch(reportSubcategoriesProvider).isEmpty
                   ? [
                       DropdownMenuItem<int>(
                           value: null,
                           child: Text('Select category first'.tr()))
                     ]
                   : [
-                      for (final subcategory in subcategories)
+                      for (final subcategory
+                          in ref.watch(reportSubcategoriesProvider))
                         DropdownMenuItem<int>(
                             value: subcategory.id,
-                            child: Text(subcategory.name.tr())),
+                            child: Text(_humanize(subcategory.name).tr())),
                     ],
-              onChanged: subcategories.isEmpty
+              onChanged: ref.watch(reportSubcategoriesProvider).isEmpty
                   ? null
                   : (value) {
                       if (value == null) {
                         ref
                             .read(reportFormProvider.notifier)
-                            .updateSubcategory(null);
+                            .setSubcategory(null);
                         return;
                       }
-                      final selected = subcategories
+                      final selected = ref
+                          .watch(reportSubcategoriesProvider)
                           .firstWhere((subcategory) => subcategory.id == value);
                       ref
                           .read(reportFormProvider.notifier)
-                          .updateSubcategory(selected);
+                          .setSubcategory(selected);
                     },
               validator: (value) =>
                   value == null ? 'Select a sub-category'.tr() : null,
@@ -161,11 +178,9 @@ class _ReportPageState extends ConsumerState<ReportPage> {
               decoration: InputDecoration(
                   labelText: 'Description'.tr(),
                   hintText: 'Describe what is happening...'.tr()),
-              onChanged: (value) => ref
-                  .read(reportFormProvider.notifier)
-                  .updateDescription(value),
-              validator: (value) => validateNotEmpty(context, value,
-                  fieldName: 'Description'.tr()),
+              onChanged: (value) =>
+                  ref.read(reportFormProvider.notifier).setDescription(value),
+              validator: (value) => null, // Description is optional
             ),
             const SizedBox(height: 16),
             _AudienceSelector(selected: formState.audience),
@@ -203,7 +218,7 @@ class _ReportPageState extends ConsumerState<ReportPage> {
               value: formState.agreedToTerms,
               onChanged: (value) => ref
                   .read(reportFormProvider.notifier)
-                  .setAgreement(value ?? false),
+                  .setAgreedToTerms(value ?? false),
             ),
             const SizedBox(height: 24),
             AppButton(
@@ -244,7 +259,7 @@ class _AudienceSelector extends ConsumerWidget {
                 selected: entry.key == selected,
                 onSelected: (_) => ref
                     .read(reportFormProvider.notifier)
-                    .toggleAudience(entry.key),
+                    .setAudience(entry.key),
               ),
           ],
         ),

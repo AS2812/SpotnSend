@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:spotnsend/data/models/settings_models.dart';
 import 'package:spotnsend/features/auth/providers/auth_providers.dart';
-import 'package:spotnsend/widgets/toasts.dart';
+import 'package:spotnsend/shared/widgets/toasts.dart';
 import 'package:spotnsend/features/home/settings/providers/settings_providers.dart';
 import 'package:spotnsend/l10n/app_localizations.dart';
 
