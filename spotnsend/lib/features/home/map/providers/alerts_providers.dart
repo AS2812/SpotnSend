@@ -1,16 +1,29 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:spotnsend/data/models/alert_models.dart';
 import 'package:spotnsend/data/services/supabase_alerts_service.dart';
+import 'package:spotnsend/features/home/map/providers/map_providers.dart';
 
 final nearbyAlertsProvider =
-    FutureProvider.family<List<Alert>, Map<String, double>>(
-        (ref, params) async {
+    FutureProvider.autoDispose<List<Alert>>((ref) async {
   final alertsService = ref.watch(supabaseAlertsServiceProvider);
-  return alertsService.fetchNearby(
-    lat: params['lat']!,
-    lng: params['lng']!,
-    radiusKm: params['radiusKm'] ?? 10.0,
+  final filters = ref.watch(mapFiltersProvider);
+  final location = await ref.watch(currentLocationProvider.future);
+
+  const fallbackLat = 24.7136;
+  const fallbackLng = 46.6753;
+
+  final lat = (location?.latitude ?? fallbackLat).toDouble();
+  final lng = (location?.longitude ?? fallbackLng).toDouble();
+
+  final alerts = await alertsService.fetchNearby(
+    lat: lat,
+    lng: lng,
+    radiusKm: filters.radiusKm,
   );
+
+  return alerts
+      .where((alert) => alert.status == AlertStatus.active)
+      .toList(growable: false);
 });
 
 final allAlertsProvider = FutureProvider<List<Alert>>((ref) async {

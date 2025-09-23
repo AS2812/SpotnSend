@@ -81,7 +81,10 @@ class _ReportPageState extends ConsumerState<ReportPage> {
       success: (report) {
         showSuccessToast(
             context, 'Report submitted. Officials will review shortly.'.tr());
-        ref.invalidate(nearbyReportsProvider);
+        ref
+            .read(mapReportsControllerProvider.notifier)
+            .addOrReplace(report);
+        ref.invalidate(mapReportsControllerProvider);
       },
       failure: (message) => showErrorToast(context, message),
     );

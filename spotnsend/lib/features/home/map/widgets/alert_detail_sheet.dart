@@ -13,166 +13,152 @@ class AlertDetailSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
+    final theme = Theme.of(context);
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(24, 16, 24, bottomPadding + 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(
+              child: Container(
+                width: 48,
+                height: 4,
                 decoration: BoxDecoration(
-                  color: _getSeverityColor(alert.severity).withOpacity(0.1),
+                  color: Colors.grey.shade400,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(
-                  _getSeverityIcon(alert.severity),
-                  color: _getSeverityColor(alert.severity),
-                  size: 24,
-                ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      alert.title,
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    Text(
-                      _getSeverityText(alert.severity),
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: _getSeverityColor(alert.severity),
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: alert.status == AlertStatus.active
-                      ? Colors.green.withOpacity(0.1)
-                      : Colors.grey.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  alert.status.name.toUpperCase(),
-                  style: TextStyle(
-                    color: alert.status == AlertStatus.active
-                        ? Colors.green
-                        : Colors.grey,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: _getSeverityColor(alert.severity).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    _getSeverityIcon(alert.severity),
+                    color: _getSeverityColor(alert.severity),
+                    size: 24,
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Description
-          if (alert.description.isNotEmpty) ...[
-            Text(
-              'Description'.tr(),
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              alert.description,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 16),
-          ],
-
-          // Category and Subcategory
-          Row(
-            children: [
-              Expanded(
-                child: _InfoChip(
-                  icon: Icons.category,
-                  label: 'Category'.tr(),
-                  value: alert.category.replaceAll('_', ' ').toUpperCase(),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(alert.title, style: theme.textTheme.titleLarge),
+                      Text(
+                        _getSeverityText(alert.severity),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                              color: _getSeverityColor(alert.severity),
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              if (alert.subcategory.isNotEmpty)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: alert.status == AlertStatus.active
+                        ? Colors.green.withOpacity(0.1)
+                        : Colors.grey.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    alert.status.name.toUpperCase(),
+                    style: TextStyle(
+                      color: alert.status == AlertStatus.active
+                          ? Colors.green
+                          : Colors.grey,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            if (alert.description.isNotEmpty) ...[
+              Text('Description'.tr(), style: theme.textTheme.titleMedium),
+              const SizedBox(height: 8),
+              Text(alert.description, style: theme.textTheme.bodyMedium),
+              const SizedBox(height: 16),
+            ],
+            Row(
+              children: [
                 Expanded(
                   child: _InfoChip(
-                    icon: Icons.label,
-                    label: 'Subcategory'.tr(),
-                    value: alert.subcategory.replaceAll('_', ' ').toUpperCase(),
+                    icon: Icons.category,
+                    label: 'Category'.tr(),
+                    value:
+                        alert.category.replaceAll('_', ' ').toUpperCase(),
                   ),
                 ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Location and Radius
-          Row(
-            children: [
-              Expanded(
-                child: _InfoChip(
-                  icon: Icons.location_on,
-                  label: 'Location'.tr(),
-                  value:
-                      '${alert.latitude.toStringAsFixed(4)}, ${alert.longitude.toStringAsFixed(4)}',
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _InfoChip(
-                  icon: Icons.radio_button_unchecked,
-                  label: 'Radius'.tr(),
-                  value: '${(alert.radiusMeters / 1000).toStringAsFixed(1)} km',
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Time
-          _InfoChip(
-            icon: Icons.access_time,
-            label: 'Created'.tr(),
-            value: _formatDateTime(alert.createdAt),
-          ),
-          const SizedBox(height: 24),
-
-          // Actions
-          if (alert.status == AlertStatus.active) ...[
+                const SizedBox(width: 8),
+                if (alert.subcategory.isNotEmpty)
+                  Expanded(
+                    child: _InfoChip(
+                      icon: Icons.label,
+                      label: 'Subcategory'.tr(),
+                      value: alert.subcategory
+                          .replaceAll('_', ' ')
+                          .toUpperCase(),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
             Row(
               children: [
                 Expanded(
-                  child: AppButton(
-                    label: 'Mark as Resolved'.tr(),
-                    variant: ButtonVariant.secondary,
-                    icon: Icons.check_circle,
-                    onPressed: () => _resolveAlert(context, ref),
+                  child: _InfoChip(
+                    icon: Icons.location_on,
+                    label: 'Location'.tr(),
+                    value:
+                        '${alert.latitude.toStringAsFixed(4)}, ${alert.longitude.toStringAsFixed(4)}',
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _InfoChip(
+                    icon: Icons.radio_button_unchecked,
+                    label: 'Radius'.tr(),
+                    value: '${(alert.radiusMeters / 1000).toStringAsFixed(1)} km',
                   ),
                 ),
               ],
             ),
-          ] else ...[
-            Row(
-              children: [
-                Expanded(
-                  child: AppButton(
-                    label: 'Alert Resolved'.tr(),
-                    variant: ButtonVariant.secondary,
-                    icon: Icons.check_circle,
-                    onPressed: null, // Disabled
-                  ),
-                ),
-              ],
+            const SizedBox(height: 16),
+            _InfoChip(
+              icon: Icons.access_time,
+              label: 'Created'.tr(),
+              value: _formatDateTime(alert.createdAt),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: AppButton(
+                label: alert.status == AlertStatus.active
+                    ? 'Mark as Resolved'.tr()
+                    : 'Alert Resolved'.tr(),
+                variant: ButtonVariant.secondary,
+                icon: Icons.check_circle,
+                onPressed: alert.status == AlertStatus.active
+                    ? () => _resolveAlert(context, ref)
+                    : null,
+              ),
             ),
           ],
-        ],
+        ),
       ),
     );
   }
