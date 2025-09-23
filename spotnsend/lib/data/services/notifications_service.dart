@@ -109,7 +109,8 @@ class NotificationsService {
     // Resolve app user_id (bigint) for server-side filter (nice-to-have)
     int? userId;
     try {
-      final res = await _client.rpc('civic_app.current_user_id');
+      final res =
+          await _client.schema('civic_app').rpc('current_user_id');
       if (res is int) userId = res;
       if (res is num) userId = res.toInt();
     } catch (_) {

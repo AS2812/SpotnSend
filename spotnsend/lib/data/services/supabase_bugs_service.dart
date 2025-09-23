@@ -25,7 +25,8 @@ class SupabaseBugsService {
     try {
       int? userId;
       try {
-        final r = await _client.rpc('civic_app.current_user_id');
+        final r =
+            await _client.schema('civic_app').rpc('current_user_id');
         if (r is int) userId = r;
         if (r is num) userId = r.toInt();
       } catch (_) {
