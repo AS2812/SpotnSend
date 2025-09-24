@@ -4,7 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:go_router/go_router.dart';
 import 'package:spotnsend/core/router/routes.dart';
+import 'package:spotnsend/core/utils/result.dart';
+import 'package:spotnsend/data/models/alert_models.dart';
 import 'package:spotnsend/data/models/report_models.dart';
+import 'package:spotnsend/data/services/supabase_alerts_service.dart';
 import 'package:spotnsend/shared/widgets/app_button.dart';
 import 'package:spotnsend/shared/widgets/confirm_dialog.dart';
 import 'package:spotnsend/shared/widgets/toasts.dart';
@@ -23,6 +26,8 @@ class ReportPage extends ConsumerStatefulWidget {
 class _ReportPageState extends ConsumerState<ReportPage> {
   final _formKey = GlobalKey<FormState>();
   final _descriptionController = TextEditingController();
+  ProviderSubscription<ReportFormData>? _formSubscription;
+  bool _isSubmitting = false;
 
   String _humanize(String value) {
     if (value.isEmpty) return value;
@@ -34,7 +39,20 @@ class _ReportPageState extends ConsumerState<ReportPage> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _descriptionController.text = ref.read(reportFormProvider).description;
+    _formSubscription =
+        ref.listen<ReportFormData>(reportFormProvider, (previous, next) {
+      if (_descriptionController.text != next.description) {
+        _descriptionController.text = next.description;
+      }
+    });
+  }
+
+  @override
   void dispose() {
+    _formSubscription?.close();
     _descriptionController.dispose();
     super.dispose();
   }
@@ -51,10 +69,26 @@ class _ReportPageState extends ConsumerState<ReportPage> {
     }
   }
 
+  AlertSeverity _mapSeverity(ReportPriority priority) {
+    switch (priority) {
+      case ReportPriority.low:
+        return AlertSeverity.low;
+      case ReportPriority.normal:
+        return AlertSeverity.medium;
+      case ReportPriority.high:
+        return AlertSeverity.high;
+      case ReportPriority.critical:
+        return AlertSeverity.critical;
+    }
+  }
+
   Future<void> _submit() async {
+    if (_isSubmitting) return;
     if (!_formKey.currentState!.validate()) {
       return;
     }
+
+    FocusScope.of(context).unfocus();
 
     final formState = ref.read(reportFormProvider);
     if (!formState.agreedToTerms) {
@@ -76,18 +110,80 @@ class _ReportPageState extends ConsumerState<ReportPage> {
       return;
     }
 
-    final result = await ref.read(reportFormProvider.notifier).submit(ref);
-    result.when(
-      success: (report) {
-        showSuccessToast(
-            context, 'Report submitted. Officials will review shortly.'.tr());
-        ref
-            .read(mapReportsControllerProvider.notifier)
-            .addOrReplace(report);
-        ref.invalidate(mapReportsControllerProvider);
-      },
-      failure: (message) => showErrorToast(context, message),
-    );
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    final submittedForm = formState;
+
+    try {
+      final result = await ref.read(reportFormProvider.notifier).submit(ref);
+
+      await result.when<Future<void>>(
+        success: (report) async {
+          if (!mounted) return;
+
+          ref.read(mapReportsControllerProvider.notifier).addOrReplace(report);
+          ref.invalidate(mapReportsControllerProvider);
+          ref.invalidate(nearbyReportsProvider);
+
+          final audience =
+              submittedForm.notifyScope ?? submittedForm.audience;
+          final severity =
+              _mapSeverity(submittedForm.priority ?? ReportPriority.normal);
+          final radiusMeters = (submittedForm.radiusKm * 1000).round();
+
+          String? alertError;
+
+          if (audience != ReportAudience.government) {
+            final alertsService = ref.read(supabaseAlertsServiceProvider);
+            final alertResponse = await alertsService.createFromReport(
+              reportId: report.id,
+              title: _humanize(report.subcategory.isNotEmpty
+                  ? report.subcategory
+                  : report.categoryName),
+              description: report.description.isNotEmpty
+                  ? report.description
+                  : 'A new incident was reported nearby.'.tr(),
+              category: report.categoryName,
+              subcategory: report.subcategory.isNotEmpty
+                  ? report.subcategory
+                  : report.categoryName,
+              latitude: report.lat,
+              longitude: report.lng,
+              radiusMeters: radiusMeters,
+              severity: severity.name,
+              notifyScope: audience.name,
+            );
+            if (alertResponse is Failure<Alert>) {
+              alertError = alertResponse.message;
+            }
+          }
+
+          final successMessage = audience == ReportAudience.government
+              ? 'Report submitted. Officials will review shortly.'.tr()
+              : 'Report submitted and nearby users have been alerted.'.tr();
+
+          if (!mounted) return;
+          showSuccessToast(context, successMessage);
+
+          if (alertError != null && mounted) {
+            final failureMessage = 'Failed to notify nearby users.'.tr();
+            showErrorToast(context, '$failureMessage ${alertError!}');
+          }
+        },
+        failure: (message) async {
+          if (!mounted) return;
+          showErrorToast(context, message);
+        },
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
   }
 
   @override
@@ -99,136 +195,154 @@ class _ReportPageState extends ConsumerState<ReportPage> {
 
     final formState = ref.watch(reportFormProvider);
     final categoriesAsync = ref.watch(reportCategoriesProvider);
+    final subcategories = ref.watch(reportSubcategoriesProvider);
+
+    final bottomPadding = MediaQuery.of(context).padding.bottom + 24;
 
     return Scaffold(
       appBar: AppBar(title: Text('Submit a report'.tr())),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(24),
-          children: [
-            categoriesAsync.when(
-              data: (categories) => DropdownButtonFormField<int>(
-                decoration: InputDecoration(labelText: 'Category'.tr()),
-                isExpanded: true,
-                value: formState.categoryId,
-                items: [
-                  for (final category in categories)
-                    DropdownMenuItem<int>(
-                        value: category.id,
-                        child: Text(_humanize(category.name).tr())),
-                ],
-                onChanged: (value) {
-                  if (value == null) {
-                    ref.read(reportFormProvider.notifier).setCategory(null);
-                    return;
-                  }
-                  final selected =
-                      categories.firstWhere((category) => category.id == value);
-                  ref.read(reportFormProvider.notifier).setCategory(selected);
-                },
-                validator: (value) =>
-                    value == null ? 'Select a category'.tr() : null,
-              ),
-              loading: () => const SizedBox.shrink(),
-              error: (_, __) => const SizedBox.shrink(),
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<int>(
-              decoration: InputDecoration(labelText: 'Sub-category'.tr()),
-              isExpanded: true,
-              value: ref
-                      .watch(reportSubcategoriesProvider)
-                      .any((sub) => sub.id == formState.subcategoryId)
-                  ? formState.subcategoryId
-                  : null, // Reset value if it doesn't exist in current subcategories
-              items: ref.watch(reportSubcategoriesProvider).isEmpty
-                  ? [
-                      DropdownMenuItem<int>(
-                          value: null,
-                          child: Text('Select category first'.tr()))
-                    ]
-                  : [
-                      for (final subcategory
-                          in ref.watch(reportSubcategoriesProvider))
-                        DropdownMenuItem<int>(
-                            value: subcategory.id,
-                            child: Text(_humanize(subcategory.name).tr())),
-                    ],
-              onChanged: ref.watch(reportSubcategoriesProvider).isEmpty
-                  ? null
-                  : (value) {
-                      if (value == null) {
+      body: SafeArea(
+        child: Form(
+          key: _formKey,
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 600),
+              child: ListView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: EdgeInsets.fromLTRB(24, 24, 24, bottomPadding),
+                children: [
+                  categoriesAsync.when(
+                    data: (categories) => DropdownButtonFormField<int>(
+                      decoration: InputDecoration(labelText: 'Category'.tr()),
+                      isExpanded: true,
+                      value: formState.categoryId,
+                      items: [
+                        for (final category in categories)
+                          DropdownMenuItem<int>(
+                              value: category.id,
+                              child: Text(_humanize(category.name).tr())),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) {
+                          ref
+                              .read(reportFormProvider.notifier)
+                              .setCategory(null);
+                          return;
+                        }
+                        final selected = categories
+                            .firstWhere((category) => category.id == value);
                         ref
                             .read(reportFormProvider.notifier)
-                            .setSubcategory(null);
-                        return;
-                      }
-                      final selected = ref
-                          .watch(reportSubcategoriesProvider)
-                          .firstWhere((subcategory) => subcategory.id == value);
-                      ref
-                          .read(reportFormProvider.notifier)
-                          .setSubcategory(selected);
-                    },
-              validator: (value) =>
-                  value == null ? 'Select a sub-category'.tr() : null,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _descriptionController,
-              maxLines: 4,
-              decoration: InputDecoration(
-                  labelText: 'Description'.tr(),
-                  hintText: 'Describe what is happening...'.tr()),
-              onChanged: (value) =>
-                  ref.read(reportFormProvider.notifier).setDescription(value),
-              validator: (value) => null, // Description is optional
-            ),
-            const SizedBox(height: 16),
-            _AudienceSelector(selected: formState.audience),
-            const SizedBox(height: 16),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.photo_library_rounded),
-              title: Text('Add photos or videos'.tr()),
-              subtitle: Text(formState.mediaPaths.isEmpty
-                  ? 'Optional evidence helps responders assess severity.'.tr()
-                  : context.l10n.formatWithCount(
-                      '{count} attachment(s) selected',
-                      formState.mediaPaths.length)),
-              trailing: IconButton(
-                icon: const Icon(Icons.add_a_photo_rounded),
-                onPressed: _pickMedia,
+                            .setCategory(selected);
+                      },
+                      validator: (value) =>
+                          value == null ? 'Select a category'.tr() : null,
+                    ),
+                    loading: () => const SizedBox.shrink(),
+                    error: (_, __) => const SizedBox.shrink(),
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<int>(
+                    decoration: InputDecoration(labelText: 'Sub-category'.tr()),
+                    isExpanded: true,
+                    value: subcategories
+                            .any((sub) => sub.id == formState.subcategoryId)
+                        ? formState.subcategoryId
+                        : null,
+                    items: subcategories.isEmpty
+                        ? [
+                            DropdownMenuItem<int>(
+                                value: null,
+                                child: Text('Select category first'.tr()))
+                          ]
+                        : [
+                            for (final subcategory in subcategories)
+                              DropdownMenuItem<int>(
+                                  value: subcategory.id,
+                                  child:
+                                      Text(_humanize(subcategory.name).tr())),
+                          ],
+                    onChanged: subcategories.isEmpty
+                        ? null
+                        : (value) {
+                            if (value == null) {
+                              ref
+                                  .read(reportFormProvider.notifier)
+                                  .setSubcategory(null);
+                              return;
+                            }
+                            final selected = subcategories.firstWhere(
+                                (subcategory) => subcategory.id == value);
+                            ref
+                                .read(reportFormProvider.notifier)
+                                .setSubcategory(selected);
+                          },
+                    validator: (value) =>
+                        value == null ? 'Select a sub-category'.tr() : null,
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _descriptionController,
+                    maxLines: 4,
+                    decoration: InputDecoration(
+                        labelText: 'Description'.tr(),
+                        hintText: 'Describe what is happening...'.tr()),
+                    onChanged: (value) =>
+                        ref.read(reportFormProvider.notifier).setDescription(value),
+                    validator: (value) => null,
+                  ),
+                  const SizedBox(height: 16),
+                  _AudienceSelector(selected: formState.audience),
+                  const SizedBox(height: 16),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.photo_library_rounded),
+                    title: Text('Add photos or videos'.tr()),
+                    subtitle: Text(formState.mediaPaths.isEmpty
+                        ? 'Optional evidence helps responders assess severity.'
+                            .tr()
+                        : context.l10n.formatWithCount(
+                            '{count} attachment(s) selected',
+                            formState.mediaPaths.length)),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.add_a_photo_rounded),
+                      onPressed: _pickMedia,
+                    ),
+                    onTap: _pickMedia,
+                  ),
+                  const SizedBox(height: 16),
+                  SwitchListTile(
+                    title: Text('Use current location'.tr()),
+                    subtitle: Text('Disable to drop a manual pin later.'.tr()),
+                    value: formState.useCurrentLocation,
+                    onChanged: (value) => ref
+                        .read(reportFormProvider.notifier)
+                        .setUseCurrentLocation(value),
+                  ),
+                  const SizedBox(height: 16),
+                  CheckboxListTile(
+                    title:
+                        Text('I agree to the SpotnSend reporting policy'.tr()),
+                    subtitle: Text(
+                        'False reports can lead to legal consequences and a 3-month ban.'
+                            .tr()),
+                    value: formState.agreedToTerms,
+                    onChanged: (value) => ref
+                        .read(reportFormProvider.notifier)
+                        .setAgreedToTerms(value ?? false),
+                  ),
+                  const SizedBox(height: 24),
+                  AppButton(
+                    label: 'Continue'.tr(),
+                    onPressed: _isSubmitting ? null : _submit,
+                    loading: _isSubmitting,
+                  ),
+                ],
               ),
-              onTap: _pickMedia,
             ),
-            const SizedBox(height: 16),
-            SwitchListTile(
-              title: Text('Use current location'.tr()),
-              subtitle: Text('Disable to drop a manual pin later.'.tr()),
-              value: formState.useCurrentLocation,
-              onChanged: (value) => ref
-                  .read(reportFormProvider.notifier)
-                  .setUseCurrentLocation(value),
-            ),
-            const SizedBox(height: 16),
-            CheckboxListTile(
-              title: Text('I agree to the SpotnSend reporting policy'.tr()),
-              subtitle: Text(
-                  'False reports can lead to legal consequences and a 3-month ban.'
-                      .tr()),
-              value: formState.agreedToTerms,
-              onChanged: (value) => ref
-                  .read(reportFormProvider.notifier)
-                  .setAgreedToTerms(value ?? false),
-            ),
-            const SizedBox(height: 24),
-            AppButton(
-              label: 'Continue'.tr(),
-              onPressed: _submit,
-            ),
-          ],
+          ),
         ),
       ),
     );
