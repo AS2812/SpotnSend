@@ -22,7 +22,7 @@ class SupabaseAlertsService {
     required double radiusKm,
   }) async {
     try {
-      final rows = await _client.rpc('public.alerts_nearby', params: {
+      final rows = await _client.rpc('civic_app.alerts_nearby', params: {
         'p_lat': lat,
         'p_lng': lng,
         'p_radius': (radiusKm * 1000).round(),

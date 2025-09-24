@@ -41,8 +41,9 @@ class _ReportPageState extends ConsumerState<ReportPage> {
   @override
   void initState() {
     super.initState();
-    _formSubscription = ref.listen<ReportFormData>(reportFormProvider,
-        (previous, next) {
+    _descriptionController.text = ref.read(reportFormProvider).description;
+    _formSubscription =
+        ref.listen<ReportFormData>(reportFormProvider, (previous, next) {
       if (_descriptionController.text != next.description) {
         _descriptionController.text = next.description;
       }
@@ -123,10 +124,10 @@ class _ReportPageState extends ConsumerState<ReportPage> {
           if (!mounted) return;
 
           ref.read(mapReportsControllerProvider.notifier).addOrReplace(report);
+          ref.invalidate(mapReportsControllerProvider);
           ref.invalidate(nearbyReportsProvider);
 
-          final audience =
-              submittedForm.notifyScope ?? submittedForm.audience;
+          final audience = submittedForm.notifyScope ?? submittedForm.audience;
           final severity =
               _mapSeverity(submittedForm.priority ?? ReportPriority.normal);
           final radiusMeters = (submittedForm.radiusKm * 1000).round();
@@ -170,10 +171,10 @@ class _ReportPageState extends ConsumerState<ReportPage> {
             showErrorToast(context, '$failureMessage ${alertError!}');
           }
         },
-      failure: (message) async {
-        if (!mounted) return;
-        showErrorToast(context, message);
-      },
+        failure: (message) async {
+          if (!mounted) return;
+          showErrorToast(context, message);
+        },
       );
     } finally {
       if (mounted) {
@@ -219,21 +220,18 @@ class _ReportPageState extends ConsumerState<ReportPage> {
                       items: [
                         for (final category in categories)
                           DropdownMenuItem<int>(
-                              value: category.id,
-                              child: Text(_humanize(category.name).tr())),
+                            value: category.id,
+                            child: Text(_humanize(category.name).tr()),
+                          ),
                       ],
                       onChanged: (value) {
                         if (value == null) {
-                          ref
-                              .read(reportFormProvider.notifier)
-                              .setCategory(null);
+                          ref.read(reportFormProvider.notifier).setCategory(null);
                           return;
                         }
                         final selected = categories
                             .firstWhere((category) => category.id == value);
-                        ref
-                            .read(reportFormProvider.notifier)
-                            .setCategory(selected);
+                        ref.read(reportFormProvider.notifier).setCategory(selected);
                       },
                       validator: (value) =>
                           value == null ? 'Select a category'.tr() : null,
@@ -243,24 +241,21 @@ class _ReportPageState extends ConsumerState<ReportPage> {
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<int>(
-                    decoration: InputDecoration(labelText: 'Sub-category'.tr()),
+                    decoration:
+                        InputDecoration(labelText: 'Sub-category'.tr()),
                     isExpanded: true,
                     value: subcategories
                             .any((sub) => sub.id == formState.subcategoryId)
                         ? formState.subcategoryId
                         : null, // Reset value if it doesn't exist in current subcategories
                     items: subcategories.isEmpty
-                        ? [
-                            DropdownMenuItem<int>(
-                                value: null,
-                                child: Text('Select category first'.tr()))
-                          ]
+                        ? const []
                         : [
                             for (final subcategory in subcategories)
                               DropdownMenuItem<int>(
-                                  value: subcategory.id,
-                                  child:
-                                      Text(_humanize(subcategory.name).tr())),
+                                value: subcategory.id,
+                                child: Text(_humanize(subcategory.name).tr()),
+                              ),
                           ],
                     onChanged: subcategories.isEmpty
                         ? null
@@ -277,18 +272,23 @@ class _ReportPageState extends ConsumerState<ReportPage> {
                                 .read(reportFormProvider.notifier)
                                 .setSubcategory(selected);
                           },
-                    validator: (value) =>
-                        value == null ? 'Select a sub-category'.tr() : null,
+                    validator: (value) => subcategories.isEmpty
+                        ? 'Select category first'.tr()
+                        : (value == null
+                            ? 'Select a sub-category'.tr()
+                            : null),
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _descriptionController,
                     maxLines: 4,
                     decoration: InputDecoration(
-                        labelText: 'Description'.tr(),
-                        hintText: 'Describe what is happening...'.tr()),
-                    onChanged: (value) =>
-                        ref.read(reportFormProvider.notifier).setDescription(value),
+                      labelText: 'Description'.tr(),
+                      hintText: 'Describe what is happening...'.tr(),
+                    ),
+                    onChanged: (value) => ref
+                        .read(reportFormProvider.notifier)
+                        .setDescription(value),
                     validator: (value) => null, // Description is optional
                   ),
                   const SizedBox(height: 16),
@@ -298,12 +298,15 @@ class _ReportPageState extends ConsumerState<ReportPage> {
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.photo_library_rounded),
                     title: Text('Add photos or videos'.tr()),
-                    subtitle: Text(formState.mediaPaths.isEmpty
-                        ? 'Optional evidence helps responders assess severity.'
-                            .tr()
-                        : context.l10n.formatWithCount(
-                            '{count} attachment(s) selected',
-                            formState.mediaPaths.length)),
+                    subtitle: Text(
+                      formState.mediaPaths.isEmpty
+                          ? 'Optional evidence helps responders assess severity.'
+                              .tr()
+                          : context.l10n.formatWithCount(
+                              '{count} attachment(s) selected',
+                              formState.mediaPaths.length,
+                            ),
+                    ),
                     trailing: IconButton(
                       icon: const Icon(Icons.add_a_photo_rounded),
                       onPressed: _pickMedia,
@@ -313,7 +316,8 @@ class _ReportPageState extends ConsumerState<ReportPage> {
                   const SizedBox(height: 16),
                   SwitchListTile(
                     title: Text('Use current location'.tr()),
-                    subtitle: Text('Disable to drop a manual pin later.'.tr()),
+                    subtitle:
+                        Text('Disable to drop a manual pin later.'.tr()),
                     value: formState.useCurrentLocation,
                     onChanged: (value) => ref
                         .read(reportFormProvider.notifier)
@@ -321,11 +325,11 @@ class _ReportPageState extends ConsumerState<ReportPage> {
                   ),
                   const SizedBox(height: 16),
                   CheckboxListTile(
-                    title:
-                        Text('I agree to the SpotnSend reporting policy'.tr()),
+                    title: Text('I agree to the SpotnSend reporting policy'.tr()),
                     subtitle: Text(
-                        'False reports can lead to legal consequences and a 3-month ban.'
-                            .tr()),
+                      'False reports can lead to legal consequences and a 3-month ban.'
+                          .tr(),
+                    ),
                     value: formState.agreedToTerms,
                     onChanged: (value) => ref
                         .read(reportFormProvider.notifier)
@@ -397,8 +401,10 @@ class _PendingVerificationLock extends StatelessWidget {
             children: [
               const Icon(Icons.lock_rounded, size: 72),
               const SizedBox(height: 24),
-              Text('Verification Required'.tr(),
-                  style: Theme.of(context).textTheme.headlineSmall),
+              Text(
+                'Verification Required'.tr(),
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
               const SizedBox(height: 12),
               Text(
                 'Reporting is locked until your account has been verified. You can still browse live map updates and notifications.'

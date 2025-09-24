@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -146,6 +147,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     _alertBySymbol.clear();
 
     for (final a in alerts) {
+      if (a.status != AlertStatus.active) continue;
       final color = switch (a.severity) {
         AlertSeverity.low => '#4CAF50',
         AlertSeverity.medium => '#FF9800',
@@ -208,7 +210,7 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   /// Draw a true-meters circle as a polygon fill around the user location.
   Future<void> _drawSearchRadius() async {
-    if (_controller == null || _userLocation == null) return;
+    if (_controller == null) return;
 
     // remove old fill
     if (_radiusFill != null) {
@@ -217,7 +219,8 @@ class _MapPageState extends ConsumerState<MapPage> {
     }
 
     final radiusKm = ref.read(mapFiltersProvider).radiusKm;
-    final polygon = _circlePolygon(_userLocation!, radiusKm * 1000, 96);
+    final center = _userLocation ?? _initialCenter;
+    final polygon = _circlePolygon(center, radiusKm * 1000, 96);
 
     _radiusFill = await _controller!.addFill(
       FillOptions(
@@ -260,13 +263,15 @@ class _MapPageState extends ConsumerState<MapPage> {
   // -------------------- Alerts refresh helper --------------------
 
   Future<void> _pullAlerts() async {
-    final center = _userLocation ?? _initialCenter;
-    final radiusKm = ref.read(mapFiltersProvider).radiusKm;
-
-    final alerts = await ref.read(nearbyAlertsProvider(
-      {'lat': center.latitude, 'lng': center.longitude, 'radiusKm': radiusKm},
-    ).future);
-    await _syncAlertMarkers(alerts);
+    try {
+      final alerts = await ref.read(nearbyAlertsProvider.future);
+      await _syncAlertMarkers(alerts);
+    } catch (e, st) {
+      if (kDebugMode) {
+        debugPrint('Failed to load alerts: $e');
+        debugPrintStack(stackTrace: st);
+      }
+    }
   }
 
   // -------------------- Bottom sheets --------------------
