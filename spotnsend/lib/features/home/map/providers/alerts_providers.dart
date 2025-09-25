@@ -1,57 +1,46 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:spotnsend/data/models/alert_models.dart';
 import 'package:spotnsend/data/services/supabase_alerts_service.dart';
-import 'package:spotnsend/features/home/map/providers/map_providers.dart';
 
+/// Fetch alerts near a specific location
 final nearbyAlertsProvider =
-    FutureProvider.autoDispose<List<Alert>>((ref) async {
-  final alertsService = ref.watch(supabaseAlertsServiceProvider);
-  final filters = ref.watch(mapFiltersProvider);
-  final location = await ref.watch(currentLocationProvider.future);
+    FutureProvider.family<List<Alert>, Map<String, dynamic>>(
+  (ref, params) async {
+    final service = ref.watch(supabaseAlertsServiceProvider);
+    return service.fetchNearby(
+      lat: params['lat'] as double,
+      lng: params['lng'] as double,
+      radiusKm: params['radiusKm'] as double,
+    );
+  },
+);
 
-  const fallbackLat = 24.7136;
-  const fallbackLng = 46.6753;
-
-  final lat = (location?.latitude ?? fallbackLat).toDouble();
-  final lng = (location?.longitude ?? fallbackLng).toDouble();
-
-  final alerts = await alertsService.fetchNearby(
-    lat: lat,
-    lng: lng,
-    radiusKm: filters.radiusKm,
-  );
-
-  return alerts
-      .where((alert) => alert.status == AlertStatus.active)
-      .toList(growable: false);
+/// All alerts with auto-refresh
+final alertsControllerProvider =
+    AsyncNotifierProvider<AlertsController, List<Alert>>(() {
+  return AlertsController();
 });
 
-final allAlertsProvider = FutureProvider<List<Alert>>((ref) async {
-  final alertsService = ref.watch(supabaseAlertsServiceProvider);
-  return alertsService.fetchAll();
-});
+class AlertsController extends AsyncNotifier<List<Alert>> {
+  @override
+  Future<List<Alert>> build() async {
+    final service = ref.read(supabaseAlertsServiceProvider);
 
-final alertsControllerProvider = Provider<AlertsController>((ref) {
-  final alertsService = ref.watch(supabaseAlertsServiceProvider);
-  return AlertsController(ref: ref, alertsService: alertsService);
-});
+    // Set up a realtime subscription
+    service.subscribeToAlerts().listen((alerts) {
+      // Only update if we've already built once (to avoid double loading)
+      if (state.isLoading == false) {
+        state = AsyncData(alerts);
+      }
+    });
 
-class AlertsController {
-  AlertsController({required this.ref, required this.alertsService});
-
-  final Ref ref;
-  final SupabaseAlertsService alertsService;
-
-  Future<void> refreshAlerts() async {
-    ref.invalidate(nearbyAlertsProvider);
-    ref.invalidate(allAlertsProvider);
+    // Return initial data
+    return service.fetchAll();
   }
 
-  Future<void> resolveAlert(String alertId) async {
-    final result = await alertsService.resolveAlert(alertId);
-    result.when(
-      success: (_) => refreshAlerts(),
-      failure: (message) => print('Failed to resolve alert: $message'),
-    );
+  Future<void> refresh() async {
+    state = const AsyncLoading();
+    final service = ref.read(supabaseAlertsServiceProvider);
+    state = AsyncData(await service.fetchAll());
   }
 }
