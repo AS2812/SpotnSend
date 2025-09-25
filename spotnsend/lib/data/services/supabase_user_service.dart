@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -88,9 +87,8 @@ class SupabaseUserService {
 
   /// RLS scopes rows to the current user; no need to pass user_id.
   Future<List<SavedSpot>> listSavedSpots() async {
-    final rows = await _client
-        .schema('civic_app')
-        .from('favorite_spots')
+  final rows = await _client
+    .from('favorite_spots')
         .select()
         .order('created_at', ascending: false) as List<dynamic>;
 
@@ -100,7 +98,7 @@ class SupabaseUserService {
         .toList();
   }
 
-  /// Insert without user_id (DEFAULT civic_app.current_user_id() handles it).
+  /// Insert without user_id (DEFAULT public.current_user_id() handles it).
   Future<Result<List<SavedSpot>>> addSavedSpot({
     required String name,
     required double lat,
@@ -108,7 +106,7 @@ class SupabaseUserService {
     double? radiusMeters,
   }) async {
     try {
-      await _client.schema('civic_app').from('favorite_spots').insert({
+      await _client.from('favorite_spots').insert({
         'name': name,
         'latitude': lat,
         'longitude': lng,
@@ -129,9 +127,8 @@ class SupabaseUserService {
   /// Delete by id only; RLS prevents deleting others’ rows.
   Future<Result<List<SavedSpot>>> removeSavedSpot(String id) async {
     try {
-      await _client
-          .schema('civic_app')
-          .from('favorite_spots')
+    await _client
+      .from('favorite_spots')
           .delete()
           .eq('favorite_spot_id', id);
 
@@ -151,21 +148,8 @@ class SupabaseUserService {
     _cachedUser = null;
   }
 
-  Future<dynamic> _callRpc(String fn,
-      {Map<String, dynamic>? params}) async {
-    try {
-      return await _client.rpc('civic_app.$fn', params: params);
-    } on PostgrestException catch (e) {
-      final message = e.message.toLowerCase();
-      if (message.contains('function') && message.contains('does not exist')) {
-        if (kDebugMode) {
-          debugPrint(
-              'RPC civic_app.$fn not found, retrying without schema prefix');
-        }
-        return _client.rpc(fn, params: params);
-      }
-      rethrow;
-    }
+  Future<dynamic> _callRpc(String fn, {Map<String, dynamic>? params}) {
+    return _client.rpc(fn, params: params);
   }
 
   Map<String, dynamic>? _unwrapSingleRow(dynamic result) {

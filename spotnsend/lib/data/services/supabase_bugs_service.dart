@@ -12,10 +12,9 @@ class SupabaseBugsService {
   SupabaseBugsService(this._client);
   final SupabaseClient _client;
 
-  SupabaseQueryBuilder _bugs() =>
-      _client.schema('civic_app').from('bug_reports');
+  SupabaseQueryBuilder _bugs() => _client.from('bug_reports');
 
-  /// Create a bug report. We resolve the numeric civic_app.users.user_id via RPC
+  /// Create a bug report. We resolve the numeric users.user_id via RPC
   /// so we never try to insert the Supabase UUID (type mismatch).
   Future<Result<void>> submit({
     required String title,
@@ -25,8 +24,7 @@ class SupabaseBugsService {
     try {
       int? userId;
       try {
-        final r =
-            await _client.schema('civic_app').rpc('current_user_id');
+    final r = await _client.rpc('current_user_id');
         if (r is int) userId = r;
         if (r is num) userId = r.toInt();
       } catch (_) {

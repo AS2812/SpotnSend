@@ -39,7 +39,7 @@ Future<void> main() async {
   runApp(const ProviderScope(child: SpotnSendApp()));
 }
 
-/// Listens for auth changes and calls the ensure_profile RPC so a civic_app.users row always exists.
+/// Listens for auth changes and calls the public.ensure_profile RPC so a users row always exists.
 /// This removes the need for any "Reload profile" button in the UI.
 void _wireAuthProfileBootstrap() {
   // If already signed in (hot restart / app resume), ensure once
@@ -64,19 +64,6 @@ Future<void> _ensureProfileSilently() async {
   if (u == null) return;
 
   try {
-    try {
-      await supabase.rpc('civic_app.ensure_profile', params: {
-        'p_username': (u.userMetadata?['username'] as String?) ?? '',
-        'p_full_name': (u.userMetadata?['full_name'] as String?) ?? u.email ?? '',
-        'p_email': u.email ?? '',
-      });
-      return;
-    } catch (err) {
-      if (kDebugMode) {
-        debugPrint('ensure_profile civic_app schema failed: $err');
-      }
-    }
-
     await supabase.rpc('ensure_profile', params: {
       'p_username': (u.userMetadata?['username'] as String?) ?? '',
       'p_full_name': (u.userMetadata?['full_name'] as String?) ?? u.email ?? '',

@@ -18,8 +18,7 @@ class NotificationsService {
 
   sb.RealtimeChannel? _channel;
 
-  sb.SupabaseQueryBuilder _tbl() =>
-      _client.schema('civic_app').from('notifications');
+  sb.SupabaseQueryBuilder _tbl() => _client.from('notifications');
 
   dynamic _idValue(String id) => int.tryParse(id) ?? id; // bigint-safe
 
@@ -74,8 +73,8 @@ class NotificationsService {
   Future<Result<void>> delete(String id) async {
     try {
       await _tbl()
-          .update({'deleted_at': DateTime.now().toUtc().toIso8601String()}).eq(
-              'notification_id', _idValue(id));
+          .update({'deleted_at': DateTime.now().toUtc().toIso8601String()})
+          .eq('notification_id', _idValue(id));
       return const Success(null);
     } on sb.PostgrestException catch (e) {
       return Failure(e.message);
@@ -109,8 +108,7 @@ class NotificationsService {
     // Resolve app user_id (bigint) for server-side filter (nice-to-have)
     int? userId;
     try {
-      final res =
-          await _client.schema('civic_app').rpc('current_user_id');
+      final res = await _client.rpc('current_user_id');
       if (res is int) userId = res;
       if (res is num) userId = res.toInt();
     } catch (_) {
@@ -135,7 +133,7 @@ class NotificationsService {
     for (final ev in sb.PostgresChangeEvent.values) {
       _channel!.onPostgresChanges(
         event: ev,
-        schema: 'civic_app',
+        schema: 'public',
         table: 'notifications',
         filter: filter,
         callback: (_) {

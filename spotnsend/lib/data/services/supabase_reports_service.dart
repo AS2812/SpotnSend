@@ -18,13 +18,11 @@ class SupabaseReportService {
 
   final SupabaseClient _client;
 
-  SupabaseQuerySchema get _civicApp => _client.schema('civic_app');
-
-  SupabaseQueryBuilder _reports() => _civicApp.from('reports');
-  SupabaseQueryBuilder _categories() => _civicApp.from('report_categories');
+  SupabaseQueryBuilder _reports() => _client.from('reports');
+  SupabaseQueryBuilder _categories() => _client.from('report_categories');
   SupabaseQueryBuilder _subcategories() =>
-      _civicApp.from('report_subcategories');
-  SupabaseQueryBuilder _media() => _civicApp.from('report_media');
+    _client.from('report_subcategories');
+  SupabaseQueryBuilder _media() => _client.from('report_media');
 
   /// Nearby reports via RPC with radius (meters) and optional category filter.
   Future<List<Report>> fetchNearby({
@@ -41,7 +39,7 @@ class SupabaseReportService {
       if (categoryIds.isNotEmpty) 'p_category_ids': categoryIds.toList(),
     };
 
-    final result = await _civicApp.rpc('reports_nearby', params: params);
+  final result = await _client.rpc('reports_nearby', params: params);
 
     // Supabase returns a List<dynamic> for set-returning functions
     final rows = (result is List) ? result : const <dynamic>[];
@@ -75,7 +73,7 @@ class SupabaseReportService {
       final notifyScope = (formData.notifyScope ?? formData.audience).name;
       final priority = (formData.priority ?? ReportPriority.normal).name;
 
-      final result = await _civicApp.rpc('create_report_simple', params: {
+  final result = await _client.rpc('create_report_simple', params: {
         'p_category_id': formData.categoryId,
         'p_subcategory_id': formData.subcategoryId,
         'p_description': formData.description.trim(),
@@ -113,7 +111,7 @@ class SupabaseReportService {
       // Ensure we have a full row to parse
       Map<String, dynamic> row;
       if (insertedRow != null) {
-        row = insertedRow!;
+        row = insertedRow;
       } else if (newId != null) {
         row = await _reports().select().eq('report_id', newId).single();
       } else {

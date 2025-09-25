@@ -228,19 +228,19 @@ class MapReportsController extends AsyncNotifier<List<Report>> {
     ch
       ..onPostgresChanges(
         event: sb.PostgresChangeEvent.insert,
-        schema: 'civic_app',
+        schema: 'public',
         table: 'reports',
         callback: (payload) => _upsert(payload.newRecord),
       )
       ..onPostgresChanges(
         event: sb.PostgresChangeEvent.update,
-        schema: 'civic_app',
+        schema: 'public',
         table: 'reports',
         callback: (payload) => _upsert(payload.newRecord),
       )
       ..onPostgresChanges(
         event: sb.PostgresChangeEvent.delete,
-        schema: 'civic_app',
+        schema: 'public',
         table: 'reports',
         callback: (payload) => _remove(payload.oldRecord),
       )
