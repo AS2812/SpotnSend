@@ -13,6 +13,7 @@ import 'package:spotnsend/features/home/map/map_list_view.dart';
 import 'package:spotnsend/features/home/notifications/notifications_page.dart';
 import 'package:spotnsend/features/home/report/report_page.dart';
 import 'package:spotnsend/features/home/settings/settings_page.dart';
+import 'package:spotnsend/features/home/settings/providers/settings_providers.dart';
 import 'package:spotnsend/features/home/shell.dart';
 import 'package:spotnsend/features/legal/terms_conditions_page.dart';
 import 'package:spotnsend/features/legal/user_guide_page.dart';
@@ -150,6 +151,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 class RouterNotifier extends ChangeNotifier {
   RouterNotifier(this.ref) {
     ref.listen<AuthState>(authControllerProvider, (_, __) => notifyListeners());
+    ref.listen<SettingsState>(settingsControllerProvider, (previous, next) {
+      if (previous?.locale != next.locale) {
+        notifyListeners();
+      }
+    });
   }
 
   final Ref ref;
