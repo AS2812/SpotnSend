@@ -26,6 +26,7 @@ class _LocationPickerState extends ConsumerState<LocationPicker> {
   LatLng? _selectedLocation;
   Symbol? _selectedSymbol;
   static const _selectionIconKey = 'location-picker-selection';
+  bool _hasCustomSelectionIcon = false;
 
   @override
   void initState() {
@@ -72,15 +73,23 @@ class _LocationPickerState extends ConsumerState<LocationPicker> {
 
   Future<void> _ensureSelectionIcon() async {
     if (_controller == null) return;
-    if (await _controller!.hasImage(_selectionIconKey)) return;
     try {
       final bytes = await rootBundle.load('assets/pins/select.png');
       await _controller!.addImage(
         _selectionIconKey,
         bytes.buffer.asUint8List(),
       );
+      _hasCustomSelectionIcon = true;
+    } on PlatformException catch (error) {
+      // treat "already exists" as success so we can use the custom icon
+      if (error.code == 'alreadyExists') {
+        _hasCustomSelectionIcon = true;
+        return;
+      }
+      _hasCustomSelectionIcon = false;
     } catch (_) {
       // silently fall back to default glyph
+      _hasCustomSelectionIcon = false;
     }
   }
 
@@ -100,8 +109,7 @@ class _LocationPickerState extends ConsumerState<LocationPicker> {
     }
 
     await _ensureSelectionIcon();
-    final hasCustomIcon = await _controller!.hasImage(_selectionIconKey);
-    final icon = hasCustomIcon ? _selectionIconKey : 'marker-15';
+  final icon = _hasCustomSelectionIcon ? _selectionIconKey : 'marker-15';
     _selectedSymbol = await _controller!.addSymbol(
       SymbolOptions(
         geometry: location,

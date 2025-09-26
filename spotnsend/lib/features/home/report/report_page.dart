@@ -67,8 +67,8 @@ class _ReportPageState extends ConsumerState<ReportPage> {
         _descriptionController.text = next.description;
       }
     });
-    _locationSubscription = ref.listen<AsyncValue<LocationData?>>(
-        currentLocationProvider, (previous, next) {
+  _locationSubscription = ref.listenManual<AsyncValue<LocationData?>>(
+    currentLocationProvider, (previous, next) {
       next.whenOrNull(data: (location) {
         if (location == null) return;
         final lat = location.latitude;
