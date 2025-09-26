@@ -11,14 +11,15 @@ import '../../core/router/routes.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/toasts.dart';
 import 'providers/auth_providers.dart';
-import 'widgets/auth_header.dart';
+import 'widgets/auth_scaffold.dart';
 import 'package:spotnsend/l10n/app_localizations.dart';
 
 class SignupStep3SelfiePage extends ConsumerStatefulWidget {
   const SignupStep3SelfiePage({super.key});
 
   @override
-  ConsumerState<SignupStep3SelfiePage> createState() => _SignupStep3SelfiePageState();
+  ConsumerState<SignupStep3SelfiePage> createState() =>
+      _SignupStep3SelfiePageState();
 }
 
 class _SignupStep3SelfiePageState extends ConsumerState<SignupStep3SelfiePage> {
@@ -29,11 +30,13 @@ class _SignupStep3SelfiePageState extends ConsumerState<SignupStep3SelfiePage> {
     final status = await Permission.camera.request();
     if (!status.isGranted) {
       if (!mounted) return;
-      showErrorToast(context, 'Camera permission is required to capture a selfie.'.tr());
+      showErrorToast(
+          context, 'Camera permission is required to capture a selfie.'.tr());
       return;
     }
 
-    final result = await _picker.pickImage(source: ImageSource.camera, preferredCameraDevice: CameraDevice.front);
+    final result = await _picker.pickImage(
+        source: ImageSource.camera, preferredCameraDevice: CameraDevice.front);
     if (result != null) {
       setState(() => _selfiePath = result.path);
     }
@@ -45,7 +48,9 @@ class _SignupStep3SelfiePageState extends ConsumerState<SignupStep3SelfiePage> {
       return;
     }
 
-    await ref.read(authControllerProvider.notifier).signupStep3(SignupStep3Data(selfiePath: _selfiePath!));
+    await ref
+        .read(authControllerProvider.notifier)
+        .signupStep3(SignupStep3Data(selfiePath: _selfiePath!));
 
     final state = ref.read(authControllerProvider);
     if (!mounted) return;
@@ -54,7 +59,8 @@ class _SignupStep3SelfiePageState extends ConsumerState<SignupStep3SelfiePage> {
       return;
     }
 
-    showSuccessToast(context, 'Thank you! Your account is pending verification.'.tr());
+    showSuccessToast(
+        context, 'Thank you! Your account is pending verification.'.tr());
     context.go(RoutePaths.homeMap);
   }
 
@@ -68,60 +74,88 @@ class _SignupStep3SelfiePageState extends ConsumerState<SignupStep3SelfiePage> {
       }
     });
 
-    return Scaffold(
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            AuthGradientHeader(
-              title: 'Final step: Selfie verification'.tr(),
-              subtitle: 'Capture a quick selfie so we can match it with your ID.'.tr(),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Container(
-                    height: 250,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surface,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.2)),
-                      image: _selfiePath != null
-                          ? DecorationImage(image: FileImage(File(_selfiePath!)), fit: BoxFit.cover)
-                          : null,
-                    ),
-                    child: _selfiePath == null
-                        ? Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.camera_alt_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
-                              const SizedBox(height: 12),
-                              Text('Tap capture to take your selfie'.tr(), style: Theme.of(context).textTheme.bodyMedium),
-                            ],
-                          )
-                        : null,
+    return AuthScaffold(
+      title: 'Final step: Selfie verification'.tr(),
+      subtitle: 'Capture a quick selfie so we can match it with your ID.'.tr(),
+      showBackButton: true,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _SelfiePreview(path: _selfiePath),
+          const SizedBox(height: 20),
+          AppButton(
+            label:
+                (_selfiePath == null ? 'Capture selfie' : 'Retake selfie').tr(),
+            onPressed: authState.isLoading ? null : _captureSelfie,
+            variant: ButtonVariant.secondary,
+          ),
+          const SizedBox(height: 28),
+          const _PendingInfoCard(),
+          const SizedBox(height: 20),
+          AppButton(
+            label: 'Submit for verification'.tr(),
+            onPressed: authState.isLoading ? null : _submit,
+            loading: authState.isLoading,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SelfiePreview extends StatelessWidget {
+  const _SelfiePreview({required this.path});
+
+  final String? path;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      height: 260,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: theme.colorScheme.primary.withOpacity(0.15)),
+        image: path != null
+            ? DecorationImage(
+                image: FileImage(File(path!)),
+                fit: BoxFit.cover,
+              )
+            : null,
+      ),
+      child: path == null
+          ? Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.camera_alt_rounded,
+                    size: 52, color: theme.colorScheme.primary),
+                const SizedBox(height: 14),
+                Text(
+                  'Tap capture to take your selfie'.tr(),
+                  style: theme.textTheme.bodyMedium,
+                ),
+              ],
+            )
+          : Align(
+              alignment: Alignment.bottomRight,
+              child: Container(
+                margin: const EdgeInsets.all(16),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.55),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(
+                  'Preview'.tr(),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
                   ),
-                  const SizedBox(height: 20),
-                  AppButton(
-                    label: (_selfiePath == null ? 'Capture selfie' : 'Retake selfie').tr(),
-                    onPressed: authState.isLoading ? null : _captureSelfie,
-                    variant: ButtonVariant.secondary,
-                  ),
-                  const SizedBox(height: 32),
-                  const _PendingInfoCard(),
-                  const SizedBox(height: 24),
-                  AppButton(
-                    label: 'Submit for verification'.tr(),
-                    onPressed: authState.isLoading ? null : _submit,
-                    loading: authState.isLoading,
-                  ),
-                ],
+                ),
               ),
             ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -131,22 +165,28 @@ class _PendingInfoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.1)),
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: theme.colorScheme.primary.withOpacity(0.12)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'What happens next?'.tr(),
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+            style: theme.textTheme.titleMedium
+                ?.copyWith(fontWeight: FontWeight.w700),
           ),
-          const SizedBox(height: 8),
-          Text('Our team will verify your details shortly. You can explore reports but reporting will unlock once you are verified.'.tr()),
+          const SizedBox(height: 10),
+          Text(
+            'Our team will verify your details shortly. You can explore reports but reporting will unlock once you are verified.'
+                .tr(),
+            style: theme.textTheme.bodyMedium,
+          ),
         ],
       ),
     );

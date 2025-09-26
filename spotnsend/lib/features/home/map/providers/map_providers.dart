@@ -6,6 +6,9 @@ import 'package:location/location.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
 import 'package:spotnsend/data/models/report_models.dart';
+import 'package:spotnsend/data/models/alert_models.dart';
+import 'package:spotnsend/data/models/user_models.dart';
+import 'package:spotnsend/data/services/supabase_alerts_service.dart';
 import 'package:spotnsend/data/services/maptiler_service.dart';
 import 'package:spotnsend/data/services/supabase_reports_service.dart';
 import 'package:spotnsend/features/home/account/providers/account_providers.dart';
@@ -69,11 +72,9 @@ class MapFiltersNotifier extends Notifier<ReportFilters> {
   }
 
   void setRadius(double radiusKm) {
-    final clamped = radiusKm
-        .clamp(kMinSearchRadiusKm, kMaxSearchRadiusKm)
-        .toDouble();
-    final snapped =
-        (clamped / kRadiusStepKm).roundToDouble() * kRadiusStepKm;
+    final clamped =
+        radiusKm.clamp(kMinSearchRadiusKm, kMaxSearchRadiusKm).toDouble();
+    final snapped = (clamped / kRadiusStepKm).roundToDouble() * kRadiusStepKm;
     state = state.copyWith(
       radiusKm: double.parse(snapped.toStringAsFixed(2)),
     );
@@ -332,6 +333,86 @@ final nearbyReportsProvider =
     viewerIsGovernment: user?.isGovernment ?? false,
   );
 });
+
+final mapAlertsProvider = FutureProvider.autoDispose<List<Alert>>((ref) async {
+  final svc = ref.watch(supabaseAlertsServiceProvider);
+  final filters = ref.watch(mapFiltersProvider);
+  final loc = await ref.watch(currentLocationProvider.future);
+
+  const fallbackLat = 24.7136;
+  const fallbackLng = 46.6753;
+
+  final lat = (loc?.latitude ?? fallbackLat).toDouble();
+  final lng = (loc?.longitude ?? fallbackLng).toDouble();
+
+  final alerts = await svc.fetchNearby(
+    lat: lat,
+    lng: lng,
+    radiusKm: filters.radiusKm,
+  );
+
+  final activeAlerts = alerts
+      .where((alert) => alert.status == AlertStatus.active)
+      .toList()
+    ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+  return activeAlerts;
+});
+
+final mapListContentProvider =
+    FutureProvider.autoDispose<MapListContent>((ref) async {
+  final reports = await ref.watch(mapReportsControllerProvider.future);
+  final savedSpots = await ref.watch(accountSavedSpotsProvider.future);
+  final alerts = await ref.watch(mapAlertsProvider.future);
+
+  final activeReports = reports.where((report) => report.isActive).toList()
+    ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+  final savedSummaries = savedSpots
+      .map((spot) {
+        final radius = (spot.radiusMeters ?? 250).toDouble();
+        final matches = activeReports
+            .where((report) =>
+                _distanceMeters(spot.lat, spot.lng, report.lat, report.lng) <=
+                radius)
+            .toList();
+        return SavedSpotSummary(spot: spot, reports: matches);
+      })
+      .where((summary) => summary.reports.isNotEmpty)
+      .toList()
+    ..sort((a, b) => b.reports.length.compareTo(a.reports.length));
+
+  return MapListContent(
+    savedSpotSummaries: savedSummaries,
+    reports: activeReports,
+    alerts: alerts,
+  );
+});
+
+class MapListContent {
+  const MapListContent({
+    required this.savedSpotSummaries,
+    required this.reports,
+    required this.alerts,
+  });
+
+  final List<SavedSpotSummary> savedSpotSummaries;
+  final List<Report> reports;
+  final List<Alert> alerts;
+
+  bool get hasContent =>
+      savedSpotSummaries.isNotEmpty || reports.isNotEmpty || alerts.isNotEmpty;
+}
+
+class SavedSpotSummary {
+  const SavedSpotSummary({
+    required this.spot,
+    required this.reports,
+  });
+
+  final SavedSpot spot;
+  final List<Report> reports;
+}
 
 /// ----------------------
 /// Helpers

@@ -10,7 +10,7 @@ import '../../core/utils/validators.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_text_field.dart';
 import 'providers/auth_providers.dart';
-import 'widgets/auth_header.dart';
+import 'widgets/auth_scaffold.dart';
 import 'package:spotnsend/l10n/app_localizations.dart';
 import 'package:spotnsend/main.dart';
 
@@ -93,101 +93,94 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authControllerProvider);
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
-          onPressed: () => Navigator.of(context).maybePop(),
-        ),
-        title: Text('Login'.tr()),
-      ),
-      body: SingleChildScrollView(
+    return AuthScaffold(
+      title: 'Welcome back to SpotnSend'.tr(),
+      subtitle: 'Log in to monitor live reports and stay informed.'.tr(),
+      showBackButton: true,
+      body: Form(
+        key: _formKey,
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            AuthGradientHeader(
-              title: 'Welcome back to SpotnSend'.tr(),
-              subtitle:
-                  'Log in to monitor live reports and stay informed.'.tr(),
+            AppTextField(
+              controller: _emailController,
+              label: 'Email'.tr(),
+              hint: 'Enter your email'.tr(),
+              validator: (value) => validateEmail(context, value),
+              textInputAction: TextInputAction.next,
             ),
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    AppTextField(
-                      controller: _emailController,
-                      label: 'Email'.tr(),
-                      hint: 'Enter your email'.tr(),
-                      validator: (value) => validateEmail(context, value),
-                      textInputAction: TextInputAction.next,
-                    ),
-                    const SizedBox(height: 16),
-                    AppTextField(
-                      controller: _passwordController,
-                      label: 'Password'.tr(),
-                      hint: 'Enter your password'.tr(),
-                      obscureText: true,
-                      validator: (value) => validatePassword(context, value),
-                      textInputAction: TextInputAction.done,
-                    ),
-                    Row(
-                      children: [
-                        Checkbox(
-                          value: authState.keepSignedIn,
-                          onChanged: (value) => ref
-                              .read(authControllerProvider.notifier)
-                              .setKeepSignedIn(value ?? false),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text('Keep me signed in'.tr())),
-                      ],
-                    ),
-                    if (authState.error != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Text(
-                          authState.error!,
-                          style: TextStyle(
-                              color: Theme.of(context).colorScheme.error),
-                        ),
-                      ),
-                    AppButton(
-                      label: _isLoading ? 'Signing in...'.tr() : 'Sign in'.tr(),
-                      onPressed: _isLoading ? null : _loginPassword,
-                      loading: _isLoading,
-                    ),
-                    const SizedBox(height: 24),
-                    Center(
-                      child: RichText(
-                        text: TextSpan(
-                          text: "Don't have an account? ".tr(),
-                          style: Theme.of(context).textTheme.bodyMedium,
-                          children: [
-                            TextSpan(
-                              text: 'Sign up'.tr(),
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium
-                                  ?.copyWith(
-                                      color:
-                                          Theme.of(context).colorScheme.primary,
-                                      fontWeight: FontWeight.w700),
-                              recognizer: TapGestureRecognizer()
-                                ..onTap =
-                                    () => context.go(RoutePaths.signupStep1),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
+            const SizedBox(height: 18),
+            AppTextField(
+              controller: _passwordController,
+              label: 'Password'.tr(),
+              hint: 'Enter your password'.tr(),
+              obscureText: true,
+              validator: (value) => validatePassword(context, value),
+              textInputAction: TextInputAction.done,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Checkbox(
+                  value: authState.keepSignedIn,
+                  onChanged: (value) => ref
+                      .read(authControllerProvider.notifier)
+                      .setKeepSignedIn(value ?? false),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Keep me signed in'.tr(),
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            if (authState.error != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  authState.error!,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
+            AppButton(
+              label: _isLoading ? 'Signing in...'.tr() : 'Sign in'.tr(),
+              onPressed: _isLoading ? null : _loginPassword,
+              loading: _isLoading,
             ),
           ],
         ),
+      ),
+      footer: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 16),
+          RichText(
+            textAlign: TextAlign.center,
+            text: TextSpan(
+              text: "Don't have an account? ".tr(),
+              style: Theme.of(context).textTheme.bodyMedium,
+              children: [
+                TextSpan(
+                  text: 'Sign up'.tr(),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.primary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                  recognizer: TapGestureRecognizer()
+                    ..onTap = () => context.go(RoutePaths.signupStep1),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

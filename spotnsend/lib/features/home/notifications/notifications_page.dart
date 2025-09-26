@@ -15,7 +15,21 @@ class NotificationsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(notificationsControllerProvider);
+    final notifier = ref.read(notificationsControllerProvider.notifier);
     final isLoading = async is AsyncLoading;
+    final items = async.value ?? const <AppNotification>[];
+
+    Future<void> markAllRead() async {
+      if (items.isEmpty || isLoading) return;
+      await notifier.markAll(seen: true);
+      showSuccessToast(context, 'All notifications marked as read.'.tr());
+    }
+
+    Future<void> clearAll() async {
+      if (items.isEmpty || isLoading) return;
+      await notifier.deleteAll();
+      showSuccessToast(context, 'Notifications cleared.'.tr());
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -32,86 +46,120 @@ class NotificationsPage extends ConsumerWidget {
           ),
         ],
       ),
-      body: async.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => _ErrorView(
-          message: 'Failed to load notifications: $error',
-          onRetry: () =>
-              ref.read(notificationsControllerProvider.notifier).refresh(),
-        ),
-        data: (items) {
-          if (items.isEmpty) {
+      body: SafeArea(
+        top: false,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            Widget content = async.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(vertical: 48),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (error, _) => _ErrorView(
+                message: 'Failed to load notifications: $error',
+                onRetry: () => notifier.refresh(),
+              ),
+              data: (items) {
+                if (items.isEmpty) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 32),
+                    child: EmptyState(
+                      icon: Icons.notifications_off_outlined,
+                      title: 'No notifications yet'.tr(),
+                      message: 'When alerts arrive, they will show up here.'.tr(),
+                    ),
+                  );
+                }
+
+                return ListView.separated(
+                  physics: const NeverScrollableScrollPhysics(),
+                  shrinkWrap: true,
+                  padding: EdgeInsets.zero,
+                  itemBuilder: (_, i) =>
+                      _NotificationTile(notification: items[i]),
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemCount: items.length,
+                );
+              },
+            );
+
             return RefreshIndicator(
-              onRefresh: () =>
-                  ref.read(notificationsControllerProvider.notifier).refresh(),
-              child: ListView(
+              onRefresh: () => notifier.refresh(),
+              child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                children: [
-                  const SizedBox(height: 40),
-                  EmptyState(
-                    icon: Icons.notifications_off_outlined,
-                    title: 'No notifications yet'.tr(),
-                    message: 'When alerts arrive, they will show up here.'.tr(),
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  8,
+                  16,
+                  MediaQuery.of(context).viewInsets.bottom + 24,
+                ),
+                child: ConstrainedBox(
+                  constraints:
+                      BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _NotificationsActionBar(
+                        canAct: items.isNotEmpty && !isLoading,
+                        onMarkAllRead: markAllRead,
+                        onClearAll: clearAll,
+                      ),
+                      const SizedBox(height: 16),
+                      content,
+                      const SizedBox(height: 24),
+                    ],
                   ),
-                ],
+                ),
               ),
             );
-          }
-
-          return RefreshIndicator(
-            onRefresh: () =>
-                ref.read(notificationsControllerProvider.notifier).refresh(),
-            child: ListView.separated(
-              padding: const EdgeInsets.all(24),
-              itemBuilder: (_, i) => _NotificationTile(notification: items[i]),
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemCount: items.length,
-            ),
-          );
-        },
-      ),
-      bottomNavigationBar: async.maybeWhen(
-        data: (items) => SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: AppButton(
-                    label: 'Mark all read'.tr(),
-                    variant: ButtonVariant.secondary,
-                    onPressed: items.isEmpty || isLoading
-                        ? null
-                        : () async {
-                            await ref
-                                .read(notificationsControllerProvider.notifier)
-                                .markAll(seen: true);
-                            showSuccessToast(context,
-                                'All notifications marked as read.'.tr());
-                          },
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: AppButton(
-                    label: 'Clear all'.tr(),
-                    variant: ButtonVariant.secondary,
-                    onPressed: items.isEmpty || isLoading
-                        ? null
-                        : () async {
-                            await ref
-                                .read(notificationsControllerProvider.notifier)
-                                .deleteAll();
-                            showSuccessToast(
-                                context, 'Notifications cleared.'.tr());
-                          },
-                  ),
-                ),
-              ],
-            ),
-          ),
+          },
         ),
-        orElse: () => const SizedBox.shrink(),
+      ),
+    );
+  }
+}
+
+class _NotificationsActionBar extends StatelessWidget {
+  const _NotificationsActionBar({
+    required this.canAct,
+    required this.onMarkAllRead,
+    required this.onClearAll,
+  });
+
+  final bool canAct;
+  final Future<void> Function() onMarkAllRead;
+  final Future<void> Function() onClearAll;
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    final maxButtonWidth = width > 420 ? 180.0 : double.infinity;
+    final secondaryWidth = width > 420 ? 140.0 : double.infinity;
+
+    return SafeArea(
+      bottom: false,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
+        child: Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            SizedBox(
+              width: maxButtonWidth,
+              child: OutlinedButton(
+                onPressed: canAct ? onMarkAllRead : null,
+                child: Text('Mark all read'.tr()),
+              ),
+            ),
+            SizedBox(
+              width: secondaryWidth,
+              child: OutlinedButton(
+                onPressed: canAct ? onClearAll : null,
+                child: Text('Clear all'.tr()),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

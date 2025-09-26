@@ -9,7 +9,7 @@ import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_text_field.dart';
 import '../../shared/widgets/toasts.dart';
 import 'providers/auth_providers.dart';
-import 'widgets/auth_header.dart';
+import 'widgets/auth_scaffold.dart';
 import 'package:spotnsend/l10n/app_localizations.dart';
 
 class SignupStep1Page extends ConsumerStatefulWidget {
@@ -78,96 +78,85 @@ class _SignupStep1PageState extends ConsumerState<SignupStep1Page> {
       }
     });
 
-    return Scaffold(
-      body: SingleChildScrollView(
+    return AuthScaffold(
+      title: 'Create your SpotnSend account'.tr(),
+      subtitle: 'We need a few details to set up your secure profile.'.tr(),
+      showBackButton: true,
+      body: Form(
+        key: _formKey,
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            AuthGradientHeader(
-              title: 'Create your SpotnSend account'.tr(),
-              subtitle:
-                  'We need a few details to set up your secure profile.'.tr(),
+            AppTextField(
+              controller: _fullNameController,
+              label: 'Full name'.tr(),
+              validator: (value) =>
+                  validateNotEmpty(context, value, fieldName: 'Full name'.tr()),
+              textInputAction: TextInputAction.next,
             ),
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    AppTextField(
-                      controller: _fullNameController,
-                      label: 'Full name'.tr(),
-                      validator: (value) => validateNotEmpty(context, value,
-                          fieldName: 'Full name'.tr()),
-                      textInputAction: TextInputAction.next,
-                    ),
-                    const SizedBox(height: 16),
-                    AppTextField(
-                      controller: _emailController,
-                      label: 'Email'.tr(),
-                      keyboardType: TextInputType.emailAddress,
-                      validator: (value) => validateEmail(context, value),
-                      textInputAction: TextInputAction.next,
-                    ),
-                    const SizedBox(height: 16),
-                    AppTextField(
-                      controller: _phoneController,
-                      label: 'Phone number'.tr(),
-                      keyboardType: TextInputType.phone,
-                      validator: (value) => validatePhone(context, value),
-                      textInputAction: TextInputAction.next,
-                    ),
-                    const SizedBox(height: 16),
-                    AppTextField(
-                      controller: _passwordController,
-                      label: 'Password'.tr(),
-                      obscureText: true,
-                      validator: (value) => validatePassword(context, value),
-                      textInputAction: TextInputAction.next,
-                    ),
-                    const SizedBox(height: 16),
-                    AppTextField(
-                      controller: _otpController,
-                      label: 'SMS verification code'.tr(),
-                      keyboardType: TextInputType.number,
-                      validator: (value) => validateOtp(context, value),
-                      textInputAction: TextInputAction.done,
-                    ),
-                    const SizedBox(height: 24),
-                    AppButton(
-                      label: 'Continue to ID verification'.tr(),
-                      onPressed: authState.isLoading ? null : _submit,
-                      loading: authState.isLoading,
-                    ),
-                    const SizedBox(height: 24),
-                    Center(
-                      child: RichText(
-                        text: TextSpan(
-                          text: 'Already have an account? '.tr(),
-                          style: Theme.of(context).textTheme.bodyMedium,
-                          children: [
-                            TextSpan(
-                              text: 'Log in'.tr(),
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium
-                                  ?.copyWith(
-                                      color:
-                                          Theme.of(context).colorScheme.primary,
-                                      fontWeight: FontWeight.w700),
-                              recognizer: TapGestureRecognizer()
-                                ..onTap = () => context.go(RoutePaths.login),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            const SizedBox(height: 18),
+            AppTextField(
+              controller: _emailController,
+              label: 'Email'.tr(),
+              keyboardType: TextInputType.emailAddress,
+              validator: (value) => validateEmail(context, value),
+              textInputAction: TextInputAction.next,
+            ),
+            const SizedBox(height: 18),
+            AppTextField(
+              controller: _phoneController,
+              label: 'Phone number'.tr(),
+              keyboardType: TextInputType.phone,
+              validator: (value) => validatePhone(context, value),
+              textInputAction: TextInputAction.next,
+            ),
+            const SizedBox(height: 18),
+            AppTextField(
+              controller: _passwordController,
+              label: 'Password'.tr(),
+              obscureText: true,
+              validator: (value) => validatePassword(context, value),
+              textInputAction: TextInputAction.next,
+            ),
+            const SizedBox(height: 18),
+            AppTextField(
+              controller: _otpController,
+              label: 'SMS verification code'.tr(),
+              keyboardType: TextInputType.number,
+              validator: (value) => validateOtp(context, value),
+              textInputAction: TextInputAction.done,
+            ),
+            const SizedBox(height: 28),
+            AppButton(
+              label: 'Continue to ID verification'.tr(),
+              onPressed: authState.isLoading ? null : _submit,
+              loading: authState.isLoading,
             ),
           ],
         ),
+      ),
+      footer: Column(
+        children: [
+          const SizedBox(height: 12),
+          RichText(
+            textAlign: TextAlign.center,
+            text: TextSpan(
+              text: 'Already have an account? '.tr(),
+              style: Theme.of(context).textTheme.bodyMedium,
+              children: [
+                TextSpan(
+                  text: 'Log in'.tr(),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.primary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                  recognizer: TapGestureRecognizer()
+                    ..onTap = () => context.go(RoutePaths.login),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

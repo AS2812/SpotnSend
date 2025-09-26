@@ -9,7 +9,7 @@ import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_text_field.dart';
 import '../../shared/widgets/toasts.dart';
 import 'providers/auth_providers.dart';
-import 'widgets/auth_header.dart';
+import 'widgets/auth_scaffold.dart';
 import 'package:spotnsend/l10n/app_localizations.dart';
 
 class SignupStep2IdPage extends ConsumerStatefulWidget {
@@ -83,59 +83,48 @@ class _SignupStep2IdPageState extends ConsumerState<SignupStep2IdPage> {
       }
     });
 
-    return Scaffold(
-      body: SingleChildScrollView(
+    return AuthScaffold(
+      title: 'Verify your identity'.tr(),
+      subtitle:
+          'Upload your national ID so we can keep reporting trusted.'.tr(),
+      showBackButton: true,
+      body: Form(
+        key: _formKey,
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            AuthGradientHeader(
-              title: 'Verify your identity'.tr(),
-              subtitle:
-                  'Upload your national ID so we can keep reporting trusted.'
-                      .tr(),
+            AppTextField(
+              controller: _idNumberController,
+              label: 'National ID number'.tr(),
+              keyboardType: TextInputType.number,
+              validator: (value) => validateNotEmpty(context, value,
+                  fieldName: 'National ID number'.tr()),
             ),
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    AppTextField(
-                      controller: _idNumberController,
-                      label: 'National ID number'.tr(),
-                      keyboardType: TextInputType.number,
-                      validator: (value) => validateNotEmpty(context, value,
-                          fieldName: 'National ID number'.tr()),
-                    ),
-                    const SizedBox(height: 24),
-                    _UploadTile(
-                      title: 'Front of ID'.tr(),
-                      subtitle: _frontPath ??
-                          'Upload a clear image of the front side'.tr(),
-                      onTap: () => _pickFile(true),
-                    ),
-                    const SizedBox(height: 16),
-                    _UploadTile(
-                      title: 'Back of ID'.tr(),
-                      subtitle: _backPath ??
-                          'Upload a clear image of the back side'.tr(),
-                      onTap: () => _pickFile(false),
-                    ),
-                    const SizedBox(height: 32),
-                    AppButton(
-                      label: 'Continue to selfie verification'.tr(),
-                      onPressed: authState.isLoading ? null : _submit,
-                      loading: authState.isLoading,
-                    ),
-                    const SizedBox(height: 16),
-                    AppButton(
-                      label: 'Back to info'.tr(),
-                      variant: ButtonVariant.secondary,
-                      onPressed: () => context.go(RoutePaths.signupStep1),
-                    ),
-                  ],
-                ),
-              ),
+            const SizedBox(height: 22),
+            _UploadTile(
+              title: 'Front of ID'.tr(),
+              subtitle:
+                  _frontPath ?? 'Upload a clear image of the front side'.tr(),
+              onTap: () => _pickFile(true),
+            ),
+            const SizedBox(height: 16),
+            _UploadTile(
+              title: 'Back of ID'.tr(),
+              subtitle:
+                  _backPath ?? 'Upload a clear image of the back side'.tr(),
+              onTap: () => _pickFile(false),
+            ),
+            const SizedBox(height: 28),
+            AppButton(
+              label: 'Continue to selfie verification'.tr(),
+              onPressed: authState.isLoading ? null : _submit,
+              loading: authState.isLoading,
+            ),
+            const SizedBox(height: 14),
+            AppButton(
+              label: 'Back to info'.tr(),
+              variant: ButtonVariant.secondary,
+              onPressed: () => context.go(RoutePaths.signupStep1),
             ),
           ],
         ),

@@ -36,9 +36,20 @@ class SpotnSendApp extends ConsumerWidget {
         final direction = locale.languageCode == 'ar'
             ? TextDirection.rtl
             : TextDirection.ltr;
-        return Directionality(
-          textDirection: direction,
-          child: child ?? const SizedBox(),
+        final media = MediaQuery.of(context);
+        final clampedMedia = media.copyWith(
+          textScaler: media.textScaler.clamp(
+            minScaleFactor: 1.0,
+            maxScaleFactor: 1.2,
+          ),
+        );
+
+        return MediaQuery(
+          data: clampedMedia,
+          child: Directionality(
+            textDirection: direction,
+            child: child ?? const SizedBox.shrink(),
+          ),
         );
       },
     );

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -11,14 +12,11 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 
 import 'package:spotnsend/core/utils/formatters.dart';
 import 'package:spotnsend/data/models/report_models.dart';
-import 'package:spotnsend/data/models/alert_models.dart';
 import 'package:spotnsend/data/models/user_models.dart';
-import 'package:spotnsend/data/services/supabase_alerts_service.dart';
 import 'package:spotnsend/features/auth/providers/auth_providers.dart';
 import 'package:spotnsend/features/home/account/providers/account_providers.dart';
 import 'package:spotnsend/features/home/map/providers/map_providers.dart';
 import 'package:spotnsend/features/home/map/category_icon_helpers.dart';
-import 'package:spotnsend/features/home/map/widgets/alert_detail_sheet.dart';
 import 'package:spotnsend/features/home/map/widgets/filters_sheet.dart';
 import 'package:spotnsend/features/home/map/widgets/legend.dart';
 import 'package:spotnsend/features/home/report/providers/report_providers.dart';
@@ -28,7 +26,6 @@ import 'package:spotnsend/l10n/app_localizations.dart';
 
 const String _savedSpotIconKey = 'saved-spot';
 const String _savedSpotSelectedIconKey = 'saved-spot-selected';
-
 
 class MapPage extends ConsumerStatefulWidget {
   const MapPage({super.key});
@@ -42,7 +39,6 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   // Markers by type
   final Map<Symbol, Report> _reportBySymbol = {};
-  final Map<Symbol, Alert> _alertBySymbol = {};
   final Map<Symbol, SavedSpot> _savedSpotBySymbol = {};
   final Map<int, String> _reportCategorySlugLookup = {};
 
@@ -63,7 +59,7 @@ class _MapPageState extends ConsumerState<MapPage> {
 
     // After first frame, wire listeners to providers
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // User location -> recenter & redraw radius & alerts refresh
+      // User location -> recenter & redraw radius when GPS updates
       ref.listen<AsyncValue<LocationData?>>(currentLocationProvider,
           (prev, next) {
         next.whenOrNull(data: (data) async {
@@ -81,9 +77,6 @@ class _MapPageState extends ConsumerState<MapPage> {
             await _putUserMarker(where);
             await _drawSearchRadius();
           }
-
-          // pull alerts for the new location
-          await _pullAlerts();
         });
       });
 
@@ -100,14 +93,13 @@ class _MapPageState extends ConsumerState<MapPage> {
         await _syncSavedSpotMarkers(spots);
       });
 
-      // Radius knob changed: redraw circle & refresh alerts
+      // Radius knob changed: redraw circle when the radius slider moves
       ref.listen<ReportFilters>(mapFiltersProvider, (prev, next) async {
         final prevRadius = prev?.radiusKm;
         final prevSaved = prev?.includeSavedSpots;
 
         if (prevRadius != next.radiusKm) {
           await _drawSearchRadius(next.radiusKm);
-          await _pullAlerts();
         }
         if (prevSaved != next.includeSavedSpots) {
           final spots = await ref.read(accountSavedSpotsProvider.future);
@@ -169,9 +161,9 @@ class _MapPageState extends ConsumerState<MapPage> {
     await _ensureCategoryLookup();
 
     for (final report in reports) {
-    final slug = _reportCategorySlugLookup[report.categoryId];
-    final iconKey =
-      mapImageKeyForSlug(slug) ?? mapImageKeyForCategoryName(report.categoryName);
+      final slug = _reportCategorySlugLookup[report.categoryId];
+      final iconKey = mapImageKeyForSlug(slug) ??
+          mapImageKeyForCategoryName(report.categoryName);
       final symbol = await controller.addSymbol(
         SymbolOptions(
           geometry: LatLng(report.lat, report.lng),
@@ -181,45 +173,6 @@ class _MapPageState extends ConsumerState<MapPage> {
         ),
       );
       _reportBySymbol[symbol] = report;
-    }
-  }
-
-  Future<void> _syncAlertMarkers(List<Alert> alerts) async {
-    final controller = _controller;
-    if (controller == null) return;
-
-    await _ensureMapImagesLoaded();
-
-    for (final symbol in _alertBySymbol.keys.toList(growable: false)) {
-      await controller.removeSymbol(symbol);
-    }
-    _alertBySymbol.clear();
-
-    for (final alert in alerts) {
-      if (alert.status != AlertStatus.active) continue;
-
-      final iconKey =
-          mapImageKeyForSlug(resolveCategorySlug(alert.category)) ??
-          mapImageKeyForCategoryName(alert.category);
-      final haloColor = switch (alert.severity) {
-        AlertSeverity.low => '#4CAF50',
-        AlertSeverity.medium => '#FF9800',
-        AlertSeverity.high => '#F44336',
-        AlertSeverity.critical => '#9C27B0',
-      };
-
-      final symbol = await controller.addSymbol(
-        SymbolOptions(
-          geometry: LatLng(alert.latitude, alert.longitude),
-          iconImage: iconKey ?? 'marker-15',
-          iconSize: iconKey != null ? 0.9 : 1.4,
-          iconAnchor: 'bottom',
-          iconHaloColor: haloColor,
-          iconHaloWidth: iconKey != null ? 1.6 : 0,
-          iconHaloBlur: iconKey != null ? 0.8 : 0,
-        ),
-      );
-      _alertBySymbol[symbol] = alert;
     }
   }
 
@@ -367,49 +320,6 @@ class _MapPageState extends ConsumerState<MapPage> {
     }
   }
 
-  // -------------------- Alerts refresh helper --------------------
-
-  Future<void> _pullAlerts() async {
-    if (_controller == null) return;
-
-    try {
-      final filters = ref.read(mapFiltersProvider);
-      final service = ref.read(supabaseAlertsServiceProvider);
-      final center = _userLocation ?? _initialCenter;
-
-      var alerts = await service.fetchNearby(
-        lat: center.latitude,
-        lng: center.longitude,
-        radiusKm: filters.radiusKm,
-      );
-
-      if (filters.categoryIds.isNotEmpty) {
-        await _ensureCategoryLookup();
-        final allowed = filters.categoryIds
-            .map((id) => _reportCategorySlugLookup[id])
-            .whereType<String>()
-            .map(canonicalizeSlug)
-      .toSet();
-        if (allowed.isNotEmpty) {
-          alerts = alerts
-              .where((alert) {
-                final slug = resolveCategorySlug(alert.category);
-                if (slug == null) return true;
-                return allowed.contains(canonicalizeSlug(slug));
-              })
-              .toList(growable: false);
-        }
-      }
-
-      await _syncAlertMarkers(alerts);
-    } catch (e, st) {
-      if (kDebugMode) {
-        debugPrint('Failed to load alerts: $e');
-        debugPrintStack(stackTrace: st);
-      }
-    }
-  }
-
   // -------------------- Bottom sheets --------------------
 
   void _openReportDetails(Report report) {
@@ -422,16 +332,6 @@ class _MapPageState extends ConsumerState<MapPage> {
     );
   }
 
-  void _openAlertDetails(Alert alert) {
-    showModalBottomSheet<void>(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (context) => AlertDetailSheet(alert: alert),
-    );
-  }
-
   // -------------------- Build --------------------
 
   @override
@@ -440,6 +340,10 @@ class _MapPageState extends ConsumerState<MapPage> {
     final filters = ref.watch(mapFiltersProvider);
     final reportsAsync = ref.watch(mapReportsControllerProvider);
     final permissionAsync = ref.watch(locationPermissionProvider);
+    final media = MediaQuery.of(context);
+    final isCompactHeight = media.size.height < 720;
+    final topInset = media.padding.top + (isCompactHeight ? 12 : 20);
+    final bottomInset = media.padding.bottom + (isCompactHeight ? 16 : 24);
 
     final missingKey = mapStyleUrl.contains('YOUR_KEY_HERE');
 
@@ -471,10 +375,6 @@ class _MapPageState extends ConsumerState<MapPage> {
                 controller.onSymbolTapped.add((symbol) {
                   if (_reportBySymbol.containsKey(symbol)) {
                     _openReportDetails(_reportBySymbol[symbol]!);
-                    return;
-                  }
-                  if (_alertBySymbol.containsKey(symbol)) {
-                    _openAlertDetails(_alertBySymbol[symbol]!);
                     return;
                   }
                   final spot = _savedSpotBySymbol[symbol];
@@ -510,65 +410,96 @@ class _MapPageState extends ConsumerState<MapPage> {
                 final savedSpots =
                     await ref.read(accountSavedSpotsProvider.future);
                 await _syncSavedSpotMarkers(savedSpots);
-
-                await _pullAlerts();
               },
             ),
           ),
 
           // Header + radius selector
           Positioned(
-            top: 32,
+            top: topInset,
             left: 16,
             right: 16,
             child: Column(
               children: [
-                const _MapHeader(),
+                const _GlassPanel(
+                  padding: EdgeInsets.fromLTRB(22, 22, 22, 20),
+                  child: _MapHeader(),
+                ),
                 const SizedBox(height: 12),
-                _RadiusSelector(selectedRadius: filters.radiusKm),
+                _GlassPanel(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+                  child: _RadiusSelector(selectedRadius: filters.radiusKm),
+                ),
               ],
             ),
           ),
 
           // Bottom controls & legend
           Positioned(
-            bottom: 24,
-            left: 16,
-            right: 16,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: AppButton(
-                        label: 'Filter reports'.tr(),
-                        variant: ButtonVariant.secondary,
-                        icon: Icons.tune,
-                        onPressed: _openFilters,
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              top: false,
+              minimum:
+                  EdgeInsets.fromLTRB(16, 0, 16, isCompactHeight ? 16 : 24),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final maxWidth = constraints.maxWidth;
+                  final bool canSplit = maxWidth >= 480;
+                  final double buttonWidth =
+                      canSplit ? (maxWidth - 12) / 2 : maxWidth;
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _GlassPanel(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 16),
+                        child: Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          alignment: WrapAlignment.center,
+                          children: [
+                            SizedBox(
+                              width: buttonWidth,
+                              child: AppButton(
+                                label: 'Filter reports'.tr(),
+                                variant: ButtonVariant.secondary,
+                                icon: Icons.tune,
+                                onPressed: _openFilters,
+                              ),
+                            ),
+                            SizedBox(
+                              width: buttonWidth,
+                              child: AppButton(
+                                label: 'List view'.tr(),
+                                variant: ButtonVariant.secondary,
+                                icon: Icons.view_list_rounded,
+                                onPressed: () =>
+                                    context.goNamed('map_list_view'),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: AppButton(
-                        label: 'List view'.tr(),
-                        variant: ButtonVariant.secondary,
-                        icon: Icons.view_list_rounded,
-                        onPressed: () => context.goNamed('map_list_view'),
+                      const SizedBox(height: 12),
+                      const _GlassPanel(
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                        child: MapLegend(),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                const MapLegend(),
-              ],
+                    ],
+                  );
+                },
+              ),
             ),
           ),
 
           // Recenter FAB
           Positioned(
             right: 16,
-            bottom: 160,
+            bottom: bottomInset + 130,
             child: FloatingActionButton.small(
               onPressed: () async {
                 final loc = await ref.read(currentLocationProvider.future);
@@ -585,7 +516,25 @@ class _MapPageState extends ConsumerState<MapPage> {
           ),
 
           if (reportsAsync.isLoading && !reportsAsync.hasValue)
-            _LoadingOverlay(message: 'Loading nearby reports...'.tr()),
+            Align(
+              alignment: Alignment.center,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 320),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Text(
+                    'Loading nearby reports...'.tr(),
+                    softWrap: true,
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+            ),
           if (missingKey) const _MissingKeyNotice(),
         ],
       ),
@@ -614,9 +563,8 @@ class _RadiusSelector extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final value = selectedRadius
-        .clamp(kMinSearchRadiusKm, kMaxSearchRadiusKm)
-        .toDouble();
+    final value =
+        selectedRadius.clamp(kMinSearchRadiusKm, kMaxSearchRadiusKm).toDouble();
 
     String formatRadius(double radius) {
       final l10n = AppLocalizations.current;
@@ -628,9 +576,8 @@ class _RadiusSelector extends ConsumerWidget {
       }
       final remainder = radius.remainder(1).abs();
       final showDecimal = remainder > 0.001 && radius < 10;
-      final formatted = showDecimal
-          ? radius.toStringAsFixed(1)
-          : radius.round().toString();
+      final formatted =
+          showDecimal ? radius.toStringAsFixed(1) : radius.round().toString();
       return l10n.translate('{value} km', params: {
         'value': formatted,
       });
@@ -638,46 +585,42 @@ class _RadiusSelector extends ConsumerWidget {
 
     final label = formatRadius(value);
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface.withOpacity(0.92),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Search radius'.tr(),
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w700,
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('Search radius'.tr(), style: theme.textTheme.labelLarge),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: Slider.adaptive(
-                  min: kMinSearchRadiusKm,
-                  max: kMaxSearchRadiusKm,
-                  divisions:
-                      ((kMaxSearchRadiusKm - kMinSearchRadiusKm) / kRadiusStepKm)
-                          .round(),
-                  value: value,
-                  label: label,
-                  onChanged: (v) =>
-                      ref.read(mapFiltersProvider.notifier).setRadius(v),
-                ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: Slider.adaptive(
+                min: kMinSearchRadiusKm,
+                max: kMaxSearchRadiusKm,
+                divisions:
+                    ((kMaxSearchRadiusKm - kMinSearchRadiusKm) / kRadiusStepKm)
+                        .round(),
+                value: value,
+                label: label,
+                onChanged: (v) =>
+                    ref.read(mapFiltersProvider.notifier).setRadius(v),
               ),
-              const SizedBox(width: 12),
-              Text(label, style: theme.textTheme.titleMedium),
-            ],
-          ),
-        ],
-      ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              label,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -688,68 +631,27 @@ class _MapHeader extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authControllerProvider);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withOpacity(0.95),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.12),
-            blurRadius: 22,
-            offset: const Offset(0, 12),
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Spot nearby incidents'.tr(),
+          style: theme.textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w700,
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Spot nearby incidents'.tr(),
-              style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 8),
-          Text(
-            auth.isPendingVerification
-                ? 'Verification pending. Reporting is locked, but you can explore alerts in your area.'
-                    .tr()
-                : 'Stay alert with real-time safety intel from your community.'
-                    .tr(),
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LoadingOverlay extends StatelessWidget {
-  const _LoadingOverlay({required this.message});
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: Colors.black.withOpacity(0.18),
-      alignment: Alignment.center,
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(20),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(
-              height: 20,
-              width: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-            const SizedBox(width: 12),
-            Text(message),
-          ],
+        const SizedBox(height: 8),
+        Text(
+          auth.isPendingVerification
+              ? 'Verification pending. Reporting is locked, but you can explore alerts in your area.'
+                  .tr()
+              : 'Stay alert with real-time safety intel from your community.'
+                  .tr(),
+          style: theme.textTheme.bodyMedium,
         ),
-      ),
+      ],
     );
   }
 }
@@ -783,6 +685,47 @@ class _MissingKeyNotice extends StatelessWidget {
             style: TextStyle(color: Colors.white70),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _GlassPanel extends StatelessWidget {
+  const _GlassPanel({
+    required this.child,
+    this.padding = const EdgeInsets.all(16),
+    this.radius = 28,
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final surface = theme.colorScheme.surface.withOpacity(0.92);
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: surface,
+            borderRadius: BorderRadius.circular(radius),
+            border: Border.all(color: Colors.white.withOpacity(0.16)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.08),
+                blurRadius: 24,
+                offset: const Offset(0, 14),
+              ),
+            ],
+          ),
+          child: child,
+        ),
       ),
     );
   }

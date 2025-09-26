@@ -61,25 +61,46 @@ class Report {
   final List<ReportMedia>? media;
 
   factory Report.fromJson(Map<String, dynamic> json) {
-    final statusRaw = (json['status'] ?? json['reportStatus'] ?? 'submitted').toString().toLowerCase();
+    final statusRaw = (json['status'] ?? json['reportStatus'] ?? 'submitted')
+        .toString()
+        .toLowerCase();
     final priorityRaw = (json['priority'] ?? 'normal').toString().toLowerCase();
-    final scopeRaw = (json['notify_scope'] ?? json['notifyScope'] ?? json['notify'] ?? 'people').toString().toLowerCase();
-    final ownerId = _coerceInt(json['user_id'] ?? json['userId'] ?? json['reportUserId'] ?? json['report_user_id'] ?? json['owner_user_id'] ?? json['created_by']);
+    final scopeRaw = (json['notify_scope'] ??
+            json['notifyScope'] ??
+            json['notify'] ??
+            'people')
+        .toString()
+        .toLowerCase();
+    final ownerId = _coerceInt(json['user_id'] ??
+        json['userId'] ??
+        json['reportUserId'] ??
+        json['report_user_id'] ??
+        json['owner_user_id'] ??
+        json['created_by']);
     return Report(
-      id: (json['id'] ?? json['reportId'] ?? json['report_id'] ?? '').toString(),
+      id: (json['id'] ?? json['reportId'] ?? json['report_id'] ?? '')
+          .toString(),
       categoryId: _coerceInt(json['categoryId'] ?? json['category_id']) ?? 0,
-      categoryName: (json['categoryName'] ?? json['category_name'] ?? '').toString(),
-      subcategoryId: _coerceInt(json['subcategoryId'] ?? json['subcategory_id']),
-      subcategoryName: (json['subcategoryName'] ?? json['subcategory_name'])?.toString(),
+      categoryName:
+          (json['categoryName'] ?? json['category_name'] ?? '').toString(),
+      subcategoryId:
+          _coerceInt(json['subcategoryId'] ?? json['subcategory_id']),
+      subcategoryName:
+          (json['subcategoryName'] ?? json['subcategory_name'])?.toString(),
       description: (json['description'] ?? '').toString(),
       lat: _coerceDouble(json['lat'] ?? json['latitude']) ?? 0,
       lng: _coerceDouble(json['lng'] ?? json['longitude']) ?? 0,
       status: _parseStatus(statusRaw),
       priority: _parsePriority(priorityRaw),
-      createdAt: DateTime.tryParse((json['createdAt'] ?? json['created_at'] ?? DateTime.now().toIso8601String()).toString()) ?? DateTime.now(),
+      createdAt: DateTime.tryParse((json['createdAt'] ??
+                  json['created_at'] ??
+                  DateTime.now().toIso8601String())
+              .toString()) ??
+          DateTime.now(),
       notifyScope: _parseAudience(scopeRaw),
       ownerUserId: ownerId,
-      distanceMeters: _coerceDouble(json['distanceMeters'] ?? json['distance_meters']),
+      distanceMeters:
+          _coerceDouble(json['distanceMeters'] ?? json['distance_meters']),
       media: (json['media'] ?? json['mediaItems']) is List
           ? (json['media'] ?? json['mediaItems'])
               .whereType<Map<String, dynamic>>()
@@ -93,6 +114,8 @@ class Report {
 
   String get subcategory => subcategoryName ?? '';
 
+  bool get isActive => status.isActive;
+
   bool get isGovernmentOnly => notifyScope == ReportAudience.government;
 
   bool canBeSeenBy({int? userId, bool isGovernment = false}) {
@@ -101,8 +124,9 @@ class Report {
     return userId != null && ownerUserId != null && ownerUserId == userId;
   }
 
-  List<String> get mediaUrls =>
-      (media == null || media!.isEmpty) ? const [] : media!.map((item) => item.url).toList(growable: false);
+  List<String> get mediaUrls => (media == null || media!.isEmpty)
+      ? const []
+      : media!.map((item) => item.url).toList(growable: false);
 }
 
 class ReportMedia {
@@ -184,20 +208,35 @@ class ReportFormData {
     Object? priority = _unset,
   }) {
     return ReportFormData(
-      categoryId: identical(categoryId, _unset) ? this.categoryId : categoryId as int?,
-      subcategoryId: identical(subcategoryId, _unset) ? this.subcategoryId : subcategoryId as int?,
-      categoryName: identical(categoryName, _unset) ? this.categoryName : categoryName as String?,
-      subcategoryName: identical(subcategoryName, _unset) ? this.subcategoryName : subcategoryName as String?,
+      categoryId:
+          identical(categoryId, _unset) ? this.categoryId : categoryId as int?,
+      subcategoryId: identical(subcategoryId, _unset)
+          ? this.subcategoryId
+          : subcategoryId as int?,
+      categoryName: identical(categoryName, _unset)
+          ? this.categoryName
+          : categoryName as String?,
+      subcategoryName: identical(subcategoryName, _unset)
+          ? this.subcategoryName
+          : subcategoryName as String?,
       description: description ?? this.description,
       mediaPaths: mediaPaths ?? this.mediaPaths,
       audience: audience ?? this.audience,
       useCurrentLocation: useCurrentLocation ?? this.useCurrentLocation,
-      selectedLat: identical(selectedLat, _unset) ? this.selectedLat : selectedLat as double?,
-      selectedLng: identical(selectedLng, _unset) ? this.selectedLng : selectedLng as double?,
+      selectedLat: identical(selectedLat, _unset)
+          ? this.selectedLat
+          : selectedLat as double?,
+      selectedLng: identical(selectedLng, _unset)
+          ? this.selectedLng
+          : selectedLng as double?,
       agreedToTerms: agreedToTerms ?? this.agreedToTerms,
       radiusKm: radiusKm ?? this.radiusKm,
-      notifyScope: identical(notifyScope, _unset) ? this.notifyScope : notifyScope as ReportAudience?,
-      priority: identical(priority, _unset) ? this.priority : priority as ReportPriority?,
+      notifyScope: identical(notifyScope, _unset)
+          ? this.notifyScope
+          : notifyScope as ReportAudience?,
+      priority: identical(priority, _unset)
+          ? this.priority
+          : priority as ReportPriority?,
     );
   }
 }
@@ -237,7 +276,6 @@ ReportAudience _parseAudience(String value) {
   }
 }
 
-
 ReportStatus _parseStatus(String value) {
   switch (value) {
     case 'under_review':
@@ -251,6 +289,13 @@ ReportStatus _parseStatus(String value) {
     default:
       return ReportStatus.submitted;
   }
+}
+
+extension ReportStatusX on ReportStatus {
+  bool get isActive =>
+      this == ReportStatus.submitted ||
+      this == ReportStatus.underReview ||
+      this == ReportStatus.approved;
 }
 
 ReportPriority _parsePriority(String value) {

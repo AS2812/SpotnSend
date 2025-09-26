@@ -13,8 +13,6 @@ const Set<String> _defaultStatusFilters = {
   'submitted',
   'under_review',
   'approved',
-  'rejected',
-  'archived',
 };
 
 const Set<String> _allowedStatusFilters = {
@@ -35,45 +33,31 @@ class SupabaseReportService {
 
   SupabaseQueryBuilder _reports() => _client.from('reports');
   SupabaseQueryBuilder _categories() => _client.from('report_categories');
-  SupabaseQueryBuilder _subcategories() =>
-    _client.from('report_subcategories');
+  SupabaseQueryBuilder _subcategories() => _client.from('report_subcategories');
   SupabaseQueryBuilder _media() => _client.from('report_media');
 
   /// Nearby reports via RPC with radius (meters) and optional filters.
   Future<List<Report>> fetchNearby({
-
     required double lat,
-
     required double lng,
-
     required double radiusKm,
-
     Set<int>? categoryIds,
-
     Set<int>? subcategoryIds,
-
     Set<String>? statuses,
-
     int limit = 50,
-
     int offset = 0,
-
     bool includeCurrentUser = true,
-
     bool viewerIsGovernment = false,
-
   }) async {
-
     final radiusM = (radiusKm * 1000).round();
 
     final categories = categoryIds?.toList(growable: false) ?? const <int>[];
 
     final subs = subcategoryIds?.toList(growable: false) ?? const <int>[];
 
-    final Iterable<String> rawStatuses =
-        (statuses == null || statuses.isEmpty)
-            ? _defaultStatusFilters
-            : statuses;
+    final Iterable<String> rawStatuses = (statuses == null || statuses.isEmpty)
+        ? _defaultStatusFilters
+        : statuses;
     final sanitizedStatuses = rawStatuses
         .map(_normalizeStatusLabel)
         .whereType<String>()
@@ -81,103 +65,68 @@ class SupabaseReportService {
         .toSet()
         .toList(growable: false);
 
-
-
     int? currentUserId;
 
     if (includeCurrentUser) {
-
       currentUserId = await _currentUserId();
-
     }
 
-
-
     try {
-
       final params = <String, dynamic>{
-
         'p_latitude': lat,
-
         'p_longitude': lng,
-
         'p_radius_meters': radiusM,
-
         'p_limit': limit,
-
         'p_offset': offset,
-
       };
 
       if (categories.isNotEmpty) params['p_category_ids'] = categories;
 
       if (subs.isNotEmpty) params['p_subcategory_ids'] = subs;
 
-      if (sanitizedStatuses.isNotEmpty) params['p_statuses'] = sanitizedStatuses;
+      if (sanitizedStatuses.isNotEmpty)
+        params['p_statuses'] = sanitizedStatuses;
 
       final result = await _client.rpc('find_reports_nearby', params: params);
 
       return _mapReportsFromResult(
-
         result,
-
         viewerId: includeCurrentUser ? currentUserId : null,
-
         viewerIsGovernment: viewerIsGovernment,
-
         subcategoryFilter: subs.isEmpty ? null : subs.toSet(),
-
-        statusFilter: sanitizedStatuses.isEmpty ? null : sanitizedStatuses.toSet(),
-
+        statusFilter:
+            sanitizedStatuses.isEmpty ? null : sanitizedStatuses.toSet(),
       );
-
     } on PostgrestException catch (e) {
-
       if (kDebugMode) {
-
         debugPrint('find_reports_nearby failed: ${e.message}');
-
       }
 
       final fallbackParams = <String, dynamic>{
-
         'p_lat': lat,
-
         'p_lng': lng,
-
         'p_radius_m': radiusM,
-
       };
 
       if (categories.isNotEmpty) fallbackParams['p_category_ids'] = categories;
 
       if (includeCurrentUser && currentUserId != null) {
-
         fallbackParams['p_current_user_id'] = currentUserId;
-
       }
 
-      final fallback = await _client.rpc('reports_nearby', params: fallbackParams);
+      final fallback =
+          await _client.rpc('reports_nearby', params: fallbackParams);
 
       return _mapReportsFromResult(
-
         fallback,
-
         viewerId: includeCurrentUser ? currentUserId : null,
-
         viewerIsGovernment: viewerIsGovernment,
-
         subcategoryFilter: subs.isEmpty ? null : subs.toSet(),
-
-        statusFilter: sanitizedStatuses.isEmpty ? null : sanitizedStatuses.toSet(),
-
+        statusFilter:
+            sanitizedStatuses.isEmpty ? null : sanitizedStatuses.toSet(),
       );
-
     }
-
   }
-
-
 
   /// Create a report using the simple RPC.
   /// Also uploads media (mobile/desktop only; web is skipped by design).
@@ -310,14 +259,20 @@ class SupabaseReportService {
     // markers can render with the correct icon immediately.
     row['report_id'] = row['report_id'] ?? newId;
     row['category_id'] = row['category_id'] ?? formData.categoryId;
-    row['category_name'] = row['category_name'] ??
-        formData.categoryName ?? row['category'] ?? '';
+    row['category_name'] =
+        row['category_name'] ?? formData.categoryName ?? row['category'] ?? '';
     row['category'] = row['category'] ?? row['category_name'];
     row['subcategory_id'] = row['subcategory_id'] ?? formData.subcategoryId;
     row['subcategory_name'] = row['subcategory_name'] ??
-        formData.subcategoryName ?? row['subcategory'];
-    row['notify_scope'] = row['notify_scope'] ?? (formData.notifyScope ?? formData.audience).name;
-    row['user_id'] = row['user_id'] ?? row['owner_user_id'] ?? row['created_by'] ?? _asInt(user.id) ?? user.id;
+        formData.subcategoryName ??
+        row['subcategory'];
+    row['notify_scope'] =
+        row['notify_scope'] ?? (formData.notifyScope ?? formData.audience).name;
+    row['user_id'] = row['user_id'] ??
+        row['owner_user_id'] ??
+        row['created_by'] ??
+        _asInt(user.id) ??
+        user.id;
     row['notifyScope'] = row['notifyScope'] ?? row['notify_scope'];
     row['owner_user_id'] = row['owner_user_id'] ?? row['user_id'];
 
@@ -357,9 +312,8 @@ class SupabaseReportService {
   /// All categories with their subcategories (for the Report form).
   Future<List<ReportCategory>> loadCategories() async {
     final cats = await _categories()
-            .select('category_id,name,slug,sort_order')
-            .order('sort_order', ascending: true)
-        as List<dynamic>;
+        .select('category_id,name,slug,sort_order')
+        .order('sort_order', ascending: true) as List<dynamic>;
 
     final subs = await _subcategories()
         .select('subcategory_id,category_id,name,sort_order')
@@ -431,21 +385,23 @@ class SupabaseReportService {
           subcategoryFilter.contains(report.subcategoryId));
     }
     if (statusFilter != null && statusFilter.isNotEmpty) {
-      final normalized = statusFilter.map((e) => e.trim().toLowerCase()).toSet();
-      filtered = filtered.where((report) =>
-          normalized.contains(report.status.name.toLowerCase()))
+      final normalized =
+          statusFilter.map((e) => e.trim().toLowerCase()).toSet();
+      filtered = filtered
+          .where(
+              (report) => normalized.contains(report.status.name.toLowerCase()))
           .toList(growable: false);
     }
     if (viewerId != null || viewerIsGovernment) {
       filtered = filtered.where((report) => report.canBeSeenBy(
-        userId: viewerId,
-        isGovernment: viewerIsGovernment,
-      ));
+            userId: viewerId,
+            isGovernment: viewerIsGovernment,
+          ));
     }
     return filtered.toList(growable: false);
   }
 
-/// Convert the RPC row into the shape expected by Report.fromJson.
+  /// Convert the RPC row into the shape expected by Report.fromJson.
   Map<String, dynamic> _normalizeNearbyRow(Map<String, dynamic> row) {
     final m = Map<String, dynamic>.from(row);
 
@@ -457,8 +413,10 @@ class SupabaseReportService {
     m['subcategory'] = m['subcategory'] ?? m['subcategory_name'];
     m['priority'] = (m['priority'] ?? '').toString();
     m['status'] = (m['status'] ?? '').toString();
-    m['notify_scope'] = (m['notify_scope'] ?? m['notifyScope'] ?? m['notify'] ?? '').toString();
-    m['user_id'] = m['user_id'] ?? m['userId'] ?? m['owner_user_id'] ?? m['created_by'];
+    m['notify_scope'] =
+        (m['notify_scope'] ?? m['notifyScope'] ?? m['notify'] ?? '').toString();
+    m['user_id'] =
+        m['user_id'] ?? m['userId'] ?? m['owner_user_id'] ?? m['created_by'];
     m['distanceMeters'] =
         m['distanceMeters'] ?? m['distance_meters'] ?? m['distance_m'];
 
@@ -499,7 +457,6 @@ class SupabaseReportService {
     return int.tryParse(v.toString());
   }
 }
-
 
 String? _normalizeStatusLabel(String raw) {
   final cleaned = raw.trim().toLowerCase();
