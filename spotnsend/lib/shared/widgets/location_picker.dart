@@ -66,7 +66,7 @@ class _LocationPickerState extends ConsumerState<LocationPicker> {
         geometry: location,
         iconImage: 'marker-15',
         iconColor: '#2196F3',
-        iconSize: 1.2,
+        iconSize: 0.9,
       ),
     );
   }

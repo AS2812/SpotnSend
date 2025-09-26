@@ -169,7 +169,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         SymbolOptions(
           geometry: LatLng(report.lat, report.lng),
           iconImage: iconKey ?? 'marker-15',
-          iconSize: iconKey != null ? 0.72 : 1.2,
+          iconSize: iconKey != null ? 0.58 : 0.92,
           iconAnchor: 'bottom',
         ),
       );
@@ -197,7 +197,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         SymbolOptions(
           geometry: LatLng(spot.lat, spot.lng),
           iconImage: _savedSpotIconKey,
-          iconSize: 0.9,
+          iconSize: 0.7,
           iconAnchor: 'bottom',
         ),
       );
@@ -225,7 +225,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       symbol,
       SymbolOptions(
         iconImage: _savedSpotSelectedIconKey,
-        iconSize: 1.05,
+        iconSize: 0.85,
         iconAnchor: 'bottom',
       ),
     );
@@ -244,7 +244,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         geometry: at,
         iconImage: 'marker-15',
         iconColor: '#4CAF50', // green
-        iconSize: 1.2,
+        iconSize: 1.0,
         iconAnchor: 'bottom',
       ),
     );

@@ -139,6 +139,7 @@ class MapReportsController extends AsyncNotifier<List<Report>> {
 
   // Current query params to keep realtime consistent with the UI.
   _QueryParams? _params;
+  static const int _maxVisibleReports = 200;
 
   @override
   Future<List<Report>> build() async {
@@ -212,11 +213,11 @@ class MapReportsController extends AsyncNotifier<List<Report>> {
       viewerIsGovernment: _viewerIsGovernment,
     );
 
-    final visible = data.where(_canSee).toList(growable: false);
+    final visible = _sortedReports(data.where(_canSee));
 
     _startRealtime();
 
-    state = AsyncData(visible);
+    _publish(visible);
     return visible;
   }
 
@@ -225,6 +226,23 @@ class MapReportsController extends AsyncNotifier<List<Report>> {
       userId: _viewerUserId,
       isGovernment: _viewerIsGovernment,
     );
+  }
+
+  List<Report> _sortedReports(Iterable<Report> reports) {
+    final deduped = <String, Report>{};
+    for (final report in reports) {
+      deduped[report.id] = report;
+    }
+    final list = deduped.values.toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    if (list.length > _maxVisibleReports) {
+      return list.sublist(0, _maxVisibleReports);
+    }
+    return list;
+  }
+
+  void _publish(Iterable<Report> reports) {
+    state = AsyncData(_sortedReports(reports));
   }
 
   void _startRealtime() {
@@ -245,24 +263,16 @@ class MapReportsController extends AsyncNotifier<List<Report>> {
       if (_distanceMeters(p.lat, p.lng, r.lat, r.lng) > p.radiusM + 1) return;
 
       final cur = state.value ?? const <Report>[];
-      final idx = cur.indexWhere((e) => e.id == r.id);
-      if (idx == -1) {
-        state = AsyncData([r, ...cur]);
-      } else {
-        final copy = List<Report>.from(cur);
-        copy[idx] = r;
-        state = AsyncData(copy);
-      }
+      final next = <Report>[r, ...cur.where((e) => e.id != r.id)];
+      _publish(next);
     }
 
     // DELETE: remove if present
     void _remove(Map<String, dynamic> row) {
       final id = (row['report_id'] ?? row['id'] ?? '').toString();
       final cur = state.value ?? const <Report>[];
-      final next = cur.where((e) => e.id != id).toList(growable: false);
-      if (next.length != cur.length) {
-        state = AsyncData(next);
-      }
+      if (!cur.any((e) => e.id == id)) return;
+      _publish(cur.where((e) => e.id != id));
     }
 
     ch
@@ -298,14 +308,8 @@ class MapReportsController extends AsyncNotifier<List<Report>> {
       if (_distanceMeters(p.lat, p.lng, r.lat, r.lng) > p.radiusM + 1) return;
     }
     final cur = state.value ?? const <Report>[];
-    final idx = cur.indexWhere((e) => e.id == r.id);
-    if (idx == -1) {
-      state = AsyncData([r, ...cur]);
-    } else {
-      final copy = List<Report>.from(cur);
-      copy[idx] = r;
-      state = AsyncData(copy);
-    }
+    final next = <Report>[r, ...cur.where((e) => e.id != r.id)];
+    _publish(next);
   }
 }
 

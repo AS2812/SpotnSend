@@ -1,6 +1,8 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:location/location.dart';
+import 'package:maplibre_gl/maplibre_gl.dart';
 
 import 'package:go_router/go_router.dart';
 import 'package:spotnsend/core/utils/result.dart';
@@ -10,6 +12,7 @@ import 'package:spotnsend/data/models/report_models.dart';
 import 'package:spotnsend/data/services/supabase_alerts_service.dart';
 import 'package:spotnsend/shared/widgets/app_button.dart';
 import 'package:spotnsend/shared/widgets/confirm_dialog.dart';
+import 'package:spotnsend/shared/widgets/location_picker.dart';
 import 'package:spotnsend/shared/widgets/toasts.dart';
 import 'package:spotnsend/features/auth/providers/auth_providers.dart';
 import 'package:spotnsend/features/home/map/providers/map_providers.dart';
@@ -27,6 +30,7 @@ class _ReportPageState extends ConsumerState<ReportPage> {
   final _formKey = GlobalKey<FormState>();
   final _descriptionController = TextEditingController();
   ProviderSubscription<ReportFormData>? _formSubscription;
+  ProviderSubscription<AsyncValue<LocationData?>>? _locationSubscription;
   bool _isSubmitting = false;
 
   String _humanize(String value) {
@@ -36,6 +40,21 @@ class _ReportPageState extends ConsumerState<ReportPage> {
         .split(' ')
         .map((w) => w.isEmpty ? w : (w[0].toUpperCase() + w.substring(1)))
         .join(' ');
+  }
+
+  String _formatCoordinates(double lat, double lng) {
+    return 'Lat: ${lat.toStringAsFixed(5)}, Lng: ${lng.toStringAsFixed(5)}';
+  }
+
+  String _formatRadiusLabel(double radiusKm) {
+    if (radiusKm < 1) {
+      final meters = (radiusKm * 1000).round();
+      return '$meters m';
+    }
+    final showDecimal = radiusKm < 10 && radiusKm.remainder(1).abs() > 0.001;
+    final formatted =
+        showDecimal ? radiusKm.toStringAsFixed(1) : radiusKm.round().toString();
+    return '$formatted km';
   }
 
   @override
@@ -48,11 +67,32 @@ class _ReportPageState extends ConsumerState<ReportPage> {
         _descriptionController.text = next.description;
       }
     });
+    _locationSubscription = ref.listen<AsyncValue<LocationData?>>(
+        currentLocationProvider, (previous, next) {
+      next.whenOrNull(data: (location) {
+        if (location == null) return;
+        final lat = location.latitude;
+        final lng = location.longitude;
+        if (lat == null || lng == null) return;
+        final form = ref.read(reportFormProvider);
+        if (!form.useCurrentLocation) return;
+        final currentLat = form.selectedLat;
+        final currentLng = form.selectedLng;
+        if (currentLat != null &&
+            currentLng != null &&
+            (currentLat - lat).abs() < 1e-6 &&
+            (currentLng - lng).abs() < 1e-6) {
+          return;
+        }
+        ref.read(reportFormProvider.notifier).setCoordinates(lat, lng);
+      });
+    });
   }
 
   @override
   void dispose() {
     _formSubscription?.close();
+    _locationSubscription?.close();
     _descriptionController.dispose();
     super.dispose();
   }
@@ -90,11 +130,35 @@ class _ReportPageState extends ConsumerState<ReportPage> {
 
     FocusScope.of(context).unfocus();
 
-    final formState = ref.read(reportFormProvider);
+    var formState = ref.read(reportFormProvider);
     if (!formState.agreedToTerms) {
       showErrorToast(
           context, 'You must agree to the warning before submitting.'.tr());
       return;
+    }
+
+    if (!formState.useCurrentLocation &&
+        (formState.selectedLat == null || formState.selectedLng == null)) {
+      showErrorToast(
+        context,
+        'Select a location on the map before submitting.'.tr(),
+      );
+      return;
+    }
+
+    if (formState.useCurrentLocation) {
+      final location = await ref.read(currentLocationProvider.future);
+      final lat = location?.latitude;
+      final lng = location?.longitude;
+      if (lat == null || lng == null) {
+        showErrorToast(
+          context,
+          'Turn on location services to submit a report.'.tr(),
+        );
+        return;
+      }
+      ref.read(reportFormProvider.notifier).setCoordinates(lat, lng);
+      formState = ref.read(reportFormProvider);
     }
 
     final confirm = await showConfirmDialog(
@@ -196,6 +260,20 @@ class _ReportPageState extends ConsumerState<ReportPage> {
     final formState = ref.watch(reportFormProvider);
     final categoriesAsync = ref.watch(reportCategoriesProvider);
     final subcategories = ref.watch(reportSubcategoriesProvider);
+    final currentLocationAsync = ref.watch(currentLocationProvider);
+
+    LatLng? currentLatLng;
+    currentLocationAsync.whenOrNull(data: (location) {
+      final lat = location?.latitude;
+      final lng = location?.longitude;
+      if (lat != null && lng != null) {
+        currentLatLng = LatLng(lat, lng);
+      }
+    });
+
+    final double radiusValue =
+        formState.radiusKm.clamp(kMinSearchRadiusKm, kMaxSearchRadiusKm);
+    final radiusLabel = _formatRadiusLabel(formState.radiusKm);
 
     final bottomPadding = MediaQuery.of(context).padding.bottom + 24;
 
@@ -227,12 +305,16 @@ class _ReportPageState extends ConsumerState<ReportPage> {
                       ],
                       onChanged: (value) {
                         if (value == null) {
-                          ref.read(reportFormProvider.notifier).setCategory(null);
+                          ref
+                              .read(reportFormProvider.notifier)
+                              .setCategory(null);
                           return;
                         }
                         final selected = categories
                             .firstWhere((category) => category.id == value);
-                        ref.read(reportFormProvider.notifier).setCategory(selected);
+                        ref
+                            .read(reportFormProvider.notifier)
+                            .setCategory(selected);
                       },
                       validator: (value) =>
                           value == null ? 'Select a category'.tr() : null,
@@ -242,8 +324,7 @@ class _ReportPageState extends ConsumerState<ReportPage> {
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<int>(
-                    decoration:
-                        InputDecoration(labelText: 'Sub-category'.tr()),
+                    decoration: InputDecoration(labelText: 'Sub-category'.tr()),
                     isExpanded: true,
                     value: subcategories
                             .any((sub) => sub.id == formState.subcategoryId)
@@ -275,9 +356,7 @@ class _ReportPageState extends ConsumerState<ReportPage> {
                           },
                     validator: (value) => subcategories.isEmpty
                         ? 'Select category first'.tr()
-                        : (value == null
-                            ? 'Select a sub-category'.tr()
-                            : null),
+                        : (value == null ? 'Select a sub-category'.tr() : null),
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
@@ -317,16 +396,141 @@ class _ReportPageState extends ConsumerState<ReportPage> {
                   const SizedBox(height: 16),
                   SwitchListTile(
                     title: Text('Use current location'.tr()),
-                    subtitle:
-                        Text('Disable to drop a manual pin later.'.tr()),
+                    subtitle: Text('Disable to drop a manual pin later.'.tr()),
                     value: formState.useCurrentLocation,
-                    onChanged: (value) => ref
-                        .read(reportFormProvider.notifier)
-                        .setUseCurrentLocation(value),
+                    onChanged: (value) {
+                      final notifier = ref.read(reportFormProvider.notifier);
+                      notifier.setUseCurrentLocation(value);
+                      if (value) {
+                        ref
+                            .read(currentLocationProvider.future)
+                            .then((location) {
+                          final lat = location?.latitude;
+                          final lng = location?.longitude;
+                          if (lat != null && lng != null) {
+                            notifier.setCoordinates(lat, lng);
+                          }
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  if (formState.useCurrentLocation)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.my_location_outlined),
+                      title: Text('Current location'.tr()),
+                      subtitle: Text(
+                        formState.selectedLat != null &&
+                                formState.selectedLng != null
+                            ? _formatCoordinates(
+                                formState.selectedLat!,
+                                formState.selectedLng!,
+                              )
+                            : 'Waiting for GPS fix...'.tr(),
+                      ),
+                    )
+                  else ...[
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.push_pin_outlined),
+                      title: Text(
+                        formState.selectedLat != null &&
+                                formState.selectedLng != null
+                            ? 'Location selected'.tr()
+                            : 'Select location on map'.tr(),
+                      ),
+                      subtitle: Text(
+                        formState.selectedLat != null &&
+                                formState.selectedLng != null
+                            ? _formatCoordinates(
+                                formState.selectedLat!,
+                                formState.selectedLng!,
+                              )
+                            : 'Tap to drop a pin anywhere.'.tr(),
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () async {
+                        final initial = formState.selectedLat != null &&
+                                formState.selectedLng != null
+                            ? LatLng(
+                                formState.selectedLat!,
+                                formState.selectedLng!,
+                              )
+                            : currentLatLng ?? const LatLng(24.7136, 46.6753);
+                        final picked = await context.showLocationPicker(
+                          initialLocation: initial,
+                        );
+                        if (picked != null) {
+                          ref
+                              .read(reportFormProvider.notifier)
+                              .setUseCurrentLocation(false);
+                          ref.read(reportFormProvider.notifier).setCoordinates(
+                                picked.latitude,
+                                picked.longitude,
+                              );
+                        }
+                      },
+                    ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () {
+                          final notifier =
+                              ref.read(reportFormProvider.notifier);
+                          notifier.setUseCurrentLocation(true);
+                          ref
+                              .read(currentLocationProvider.future)
+                              .then((location) {
+                            final lat = location?.latitude;
+                            final lng = location?.longitude;
+                            if (lat != null && lng != null) {
+                              notifier.setCoordinates(lat, lng);
+                            }
+                          });
+                        },
+                        child: Text('Use current location instead'.tr()),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Alert radius'.tr(),
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      Slider.adaptive(
+                        min: kMinSearchRadiusKm,
+                        max: kMaxSearchRadiusKm,
+                        divisions: ((kMaxSearchRadiusKm - kMinSearchRadiusKm) /
+                                kRadiusStepKm)
+                            .round(),
+                        value: radiusValue,
+                        label: radiusLabel,
+                        onChanged: (value) {
+                          final snapped =
+                              (value / kRadiusStepKm).roundToDouble() *
+                                  kRadiusStepKm;
+                          ref.read(reportFormProvider.notifier).setRadiusKm(
+                                double.parse(snapped.toStringAsFixed(2)),
+                              );
+                        },
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          radiusLabel,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
                   CheckboxListTile(
-                    title: Text('I agree to the SpotnSend reporting policy'.tr()),
+                    title:
+                        Text('I agree to the SpotnSend reporting policy'.tr()),
                     subtitle: Text(
                       'False reports can lead to legal consequences and a 3-month ban.'
                           .tr(),

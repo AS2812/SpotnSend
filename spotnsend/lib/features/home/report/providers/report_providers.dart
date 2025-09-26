@@ -77,7 +77,11 @@ class ReportFormNotifier extends Notifier<ReportFormData> {
   }
 
   void setUseCurrentLocation(bool value) {
-    state = state.copyWith(useCurrentLocation: value);
+    state = state.copyWith(
+      useCurrentLocation: value,
+      selectedLat: value ? null : state.selectedLat,
+      selectedLng: value ? null : state.selectedLng,
+    );
   }
 
   void setCoordinates(double lat, double lng) {
