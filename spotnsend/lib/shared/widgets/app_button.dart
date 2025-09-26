@@ -30,9 +30,10 @@ class AppButton extends StatelessWidget {
             height: 20,
             child: CircularProgressIndicator(
               valueColor: AlwaysStoppedAnimation<Color>(
-                  variant == ButtonVariant.primary
-                      ? Colors.white
-                      : AppColors.primaryBlue),
+                variant == ButtonVariant.primary
+                    ? Colors.white
+                    : AppColors.primaryBlue,
+              ),
               strokeWidth: 2.2,
             ),
           )
@@ -56,9 +57,10 @@ class AppButton extends StatelessWidget {
             ],
           );
 
+    late final Widget button;
     switch (variant) {
       case ButtonVariant.primary:
-        return DecoratedBox(
+        button = DecoratedBox(
           decoration: const BoxDecoration(
             gradient: AppGradients.heading,
             borderRadius: BorderRadius.all(Radius.circular(18)),
@@ -69,26 +71,32 @@ class AppButton extends StatelessWidget {
               backgroundColor: Colors.transparent,
               disabledBackgroundColor: AppColors.grey.withOpacity(0.3),
               shadowColor: Colors.transparent,
-              fixedSize: const Size.fromHeight(54),
+              minimumSize: const Size.fromHeight(54),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18)),
+                borderRadius: BorderRadius.circular(18),
+              ),
             ),
             child: child,
           ),
         );
+        break;
       case ButtonVariant.secondary:
-        return OutlinedButton(
+        button = OutlinedButton(
           onPressed: isDisabled ? null : onPressed,
           style: OutlinedButton.styleFrom(
             foregroundColor: AppColors.primaryBlue,
             side: const BorderSide(color: AppColors.primaryBlue, width: 1.4),
-            fixedSize: const Size.fromHeight(54),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            minimumSize: const Size.fromHeight(54),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
           ),
           child: child,
         );
+        break;
     }
+
+    return SizedBox(width: double.infinity, child: button);
   }
 }
 

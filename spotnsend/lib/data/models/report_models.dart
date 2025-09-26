@@ -30,6 +30,7 @@ class Report {
     required this.id,
     required this.categoryId,
     required this.categoryName,
+    this.categorySlug,
     this.subcategoryId,
     this.subcategoryName,
     required this.description,
@@ -47,6 +48,7 @@ class Report {
   final String id;
   final int categoryId;
   final String categoryName;
+  final String? categorySlug;
   final int? subcategoryId;
   final String? subcategoryName;
   final String description;
@@ -83,6 +85,7 @@ class Report {
       categoryId: _coerceInt(json['categoryId'] ?? json['category_id']) ?? 0,
       categoryName:
           (json['categoryName'] ?? json['category_name'] ?? '').toString(),
+      categorySlug: (json['categorySlug'] ?? json['category_slug'])?.toString(),
       subcategoryId:
           _coerceInt(json['subcategoryId'] ?? json['subcategory_id']),
       subcategoryName:
@@ -159,6 +162,7 @@ class ReportFormData {
     this.categoryId,
     this.subcategoryId,
     this.categoryName,
+    this.categorySlug,
     this.subcategoryName,
     this.description = '',
     this.mediaPaths = const [],
@@ -175,6 +179,7 @@ class ReportFormData {
   final int? categoryId;
   final int? subcategoryId;
   final String? categoryName;
+  final String? categorySlug;
   final String? subcategoryName;
   final String description;
   final List<String> mediaPaths;
@@ -195,6 +200,7 @@ class ReportFormData {
     Object? categoryId = _unset,
     Object? subcategoryId = _unset,
     Object? categoryName = _unset,
+    Object? categorySlug = _unset,
     Object? subcategoryName = _unset,
     String? description,
     List<String>? mediaPaths,

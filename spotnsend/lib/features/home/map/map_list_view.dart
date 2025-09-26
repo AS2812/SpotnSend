@@ -248,7 +248,8 @@ class _MiniReportRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final iconAsset = iconAssetForCategoryName(report.category);
+    final iconAsset = iconAssetForSlug(report.categorySlug) ??
+        iconAssetForCategoryName(report.category);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -300,7 +301,8 @@ class _ReportCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final priority = report.priority.name;
-    final iconAsset = iconAssetForCategoryName(report.category);
+    final iconAsset = iconAssetForSlug(report.categorySlug) ??
+        iconAssetForCategoryName(report.category);
 
     return Container(
       padding: const EdgeInsets.all(20),

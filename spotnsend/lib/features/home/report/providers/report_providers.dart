@@ -54,6 +54,7 @@ class ReportFormNotifier extends Notifier<ReportFormData> {
     state = state.copyWith(
       categoryId: category?.id,
       categoryName: category?.name,
+      categorySlug: category?.slug,
       // reset subcategory when category changes
       subcategoryId: null,
       subcategoryName: null,

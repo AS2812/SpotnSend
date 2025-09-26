@@ -161,7 +161,8 @@ class _MapPageState extends ConsumerState<MapPage> {
     await _ensureCategoryLookup();
 
     for (final report in reports) {
-      final slug = _reportCategorySlugLookup[report.categoryId];
+      final slug =
+          report.categorySlug ?? _reportCategorySlugLookup[report.categoryId];
       final iconKey = mapImageKeyForSlug(slug) ??
           mapImageKeyForCategoryName(report.categoryName);
       final symbol = await controller.addSymbol(
