@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:location/location.dart';
@@ -11,16 +13,22 @@ import 'package:spotnsend/core/utils/formatters.dart';
 import 'package:spotnsend/data/models/report_models.dart';
 import 'package:spotnsend/data/models/alert_models.dart';
 import 'package:spotnsend/data/models/user_models.dart';
+import 'package:spotnsend/data/services/supabase_alerts_service.dart';
 import 'package:spotnsend/features/auth/providers/auth_providers.dart';
 import 'package:spotnsend/features/home/account/providers/account_providers.dart';
 import 'package:spotnsend/features/home/map/providers/map_providers.dart';
-import 'package:spotnsend/features/home/map/providers/alerts_providers.dart';
+import 'package:spotnsend/features/home/map/category_icon_helpers.dart';
 import 'package:spotnsend/features/home/map/widgets/alert_detail_sheet.dart';
 import 'package:spotnsend/features/home/map/widgets/filters_sheet.dart';
 import 'package:spotnsend/features/home/map/widgets/legend.dart';
+import 'package:spotnsend/features/home/report/providers/report_providers.dart';
 import 'package:spotnsend/shared/widgets/app_button.dart';
 import 'package:spotnsend/shared/widgets/toasts.dart';
 import 'package:spotnsend/l10n/app_localizations.dart';
+
+const String _savedSpotIconKey = 'saved-spot';
+const String _savedSpotSelectedIconKey = 'saved-spot-selected';
+
 
 class MapPage extends ConsumerStatefulWidget {
   const MapPage({super.key});
@@ -36,11 +44,14 @@ class _MapPageState extends ConsumerState<MapPage> {
   final Map<Symbol, Report> _reportBySymbol = {};
   final Map<Symbol, Alert> _alertBySymbol = {};
   final Map<Symbol, SavedSpot> _savedSpotBySymbol = {};
+  final Map<int, String> _reportCategorySlugLookup = {};
 
   // User & view state
   LatLng _initialCenter = const LatLng(24.7136, 46.6753);
   LatLng? _userLocation;
   Symbol? _userLocationMarker;
+  Symbol? _activeSavedSpotSymbol;
+  bool _mapImagesLoaded = false;
 
   // Geodesic radius as a filled polygon (real meters)
   Fill? _radiusFill;
@@ -95,7 +106,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         final prevSaved = prev?.includeSavedSpots;
 
         if (prevRadius != next.radiusKm) {
-          await _drawSearchRadius();
+          await _drawSearchRadius(next.radiusKm);
           await _pullAlerts();
         }
         if (prevSaved != next.includeSavedSpots) {
@@ -117,99 +128,176 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   // -------------------- Markers & Overlays --------------------
 
-  Future<void> _syncReportMarkers(List<Report> reports) async {
-    if (_controller == null) return;
+  Future<void> _ensureMapImagesLoaded() async {
+    final controller = _controller;
+    if (controller == null || _mapImagesLoaded) return;
 
-    for (final s in _reportBySymbol.keys) {
-      await _controller!.removeSymbol(s);
+    Future<void> registerPin(String key, String assetPath) async {
+      try {
+        final bytes = await rootBundle.load(assetPath);
+        await controller.addImage(key, bytes.buffer.asUint8List());
+      } catch (err, stack) {
+        if (kDebugMode) {
+          debugPrint('Failed to register map image $assetPath: $err');
+          debugPrintStack(stackTrace: stack);
+        }
+      }
+    }
+
+    await registerCategoryIcons(controller);
+
+    await registerPin(_savedSpotIconKey, 'assets/pins/saved_spot.png');
+    await registerPin(
+      _savedSpotSelectedIconKey,
+      'assets/pins/saved_spot_selected.png',
+    );
+
+    _mapImagesLoaded = true;
+  }
+
+  Future<void> _syncReportMarkers(List<Report> reports) async {
+    final controller = _controller;
+    if (controller == null) return;
+
+    await _ensureMapImagesLoaded();
+
+    for (final symbol in _reportBySymbol.keys.toList(growable: false)) {
+      await controller.removeSymbol(symbol);
     }
     _reportBySymbol.clear();
 
-    for (final r in reports) {
-      final s = await _controller!.addSymbol(
+    await _ensureCategoryLookup();
+
+    for (final report in reports) {
+    final slug = _reportCategorySlugLookup[report.categoryId];
+    final iconKey =
+      mapImageKeyForSlug(slug) ?? mapImageKeyForCategoryName(report.categoryName);
+      final symbol = await controller.addSymbol(
         SymbolOptions(
-          geometry: LatLng(r.lat, r.lng),
-          iconImage: 'marker-15',
-          iconColor: '#EB3E50', // red
-          iconSize: 1.4,
+          geometry: LatLng(report.lat, report.lng),
+          iconImage: iconKey ?? 'marker-15',
+          iconSize: iconKey != null ? 0.72 : 1.2,
+          iconAnchor: 'bottom',
         ),
       );
-      _reportBySymbol[s] = r;
+      _reportBySymbol[symbol] = report;
     }
   }
 
   Future<void> _syncAlertMarkers(List<Alert> alerts) async {
-    if (_controller == null) return;
+    final controller = _controller;
+    if (controller == null) return;
 
-    for (final s in _alertBySymbol.keys) {
-      await _controller!.removeSymbol(s);
+    await _ensureMapImagesLoaded();
+
+    for (final symbol in _alertBySymbol.keys.toList(growable: false)) {
+      await controller.removeSymbol(symbol);
     }
     _alertBySymbol.clear();
 
-    for (final a in alerts) {
-      if (a.status != AlertStatus.active) continue;
-      final color = switch (a.severity) {
+    for (final alert in alerts) {
+      if (alert.status != AlertStatus.active) continue;
+
+      final iconKey =
+          mapImageKeyForSlug(resolveCategorySlug(alert.category)) ??
+          mapImageKeyForCategoryName(alert.category);
+      final haloColor = switch (alert.severity) {
         AlertSeverity.low => '#4CAF50',
         AlertSeverity.medium => '#FF9800',
         AlertSeverity.high => '#F44336',
         AlertSeverity.critical => '#9C27B0',
       };
 
-      final s = await _controller!.addSymbol(
+      final symbol = await controller.addSymbol(
         SymbolOptions(
-          geometry: LatLng(a.latitude, a.longitude),
-          iconImage: 'marker-15',
-          iconColor: color,
-          iconSize: 1.8,
+          geometry: LatLng(alert.latitude, alert.longitude),
+          iconImage: iconKey ?? 'marker-15',
+          iconSize: iconKey != null ? 0.9 : 1.4,
+          iconAnchor: 'bottom',
+          iconHaloColor: haloColor,
+          iconHaloWidth: iconKey != null ? 1.6 : 0,
+          iconHaloBlur: iconKey != null ? 0.8 : 0,
         ),
       );
-      _alertBySymbol[s] = a;
+      _alertBySymbol[symbol] = alert;
     }
   }
 
   Future<void> _syncSavedSpotMarkers(List<SavedSpot> spots) async {
-    if (_controller == null) return;
+    final controller = _controller;
+    if (controller == null) return;
 
-    // Clear current spot markers
-    for (final s in _savedSpotBySymbol.keys) {
-      await _controller!.removeSymbol(s);
+    await _ensureMapImagesLoaded();
+
+    for (final symbol in _savedSpotBySymbol.keys.toList(growable: false)) {
+      await controller.removeSymbol(symbol);
     }
     _savedSpotBySymbol.clear();
+    _activeSavedSpotSymbol = null;
 
-    // Respect filter: only draw when enabled
     final filters = ref.read(mapFiltersProvider);
     if (!filters.includeSavedSpots) return;
 
-    for (final sp in spots) {
-      final s = await _controller!.addSymbol(
+    for (final spot in spots) {
+      final symbol = await controller.addSymbol(
         SymbolOptions(
-          geometry: LatLng(sp.lat, sp.lng),
-          iconImage: 'marker-15',
-          iconColor: '#00BCD4', // cyan for saved spots
-          iconSize: 1.6,
+          geometry: LatLng(spot.lat, spot.lng),
+          iconImage: _savedSpotIconKey,
+          iconSize: 0.9,
+          iconAnchor: 'bottom',
         ),
       );
-      _savedSpotBySymbol[s] = sp;
+      _savedSpotBySymbol[symbol] = spot;
     }
   }
 
-  Future<void> _putUserMarker(LatLng at) async {
-    if (_controller == null) return;
-    if (_userLocationMarker != null) {
-      await _controller!.removeSymbol(_userLocationMarker!);
+  Future<void> _highlightSavedSpot(Symbol symbol) async {
+    final controller = _controller;
+    if (controller == null) return;
+
+    if (_activeSavedSpotSymbol != null &&
+        _savedSpotBySymbol.containsKey(_activeSavedSpotSymbol)) {
+      await controller.updateSymbol(
+        _activeSavedSpotSymbol!,
+        SymbolOptions(
+          iconImage: _savedSpotIconKey,
+          iconSize: 0.9,
+          iconAnchor: 'bottom',
+        ),
+      );
     }
-    _userLocationMarker = await _controller!.addSymbol(
+
+    await controller.updateSymbol(
+      symbol,
+      SymbolOptions(
+        iconImage: _savedSpotSelectedIconKey,
+        iconSize: 1.05,
+        iconAnchor: 'bottom',
+      ),
+    );
+
+    _activeSavedSpotSymbol = symbol;
+  }
+
+  Future<void> _putUserMarker(LatLng at) async {
+    final controller = _controller;
+    if (controller == null) return;
+    if (_userLocationMarker != null) {
+      await controller.removeSymbol(_userLocationMarker!);
+    }
+    _userLocationMarker = await controller.addSymbol(
       SymbolOptions(
         geometry: at,
         iconImage: 'marker-15',
         iconColor: '#4CAF50', // green
-        iconSize: 1.6,
+        iconSize: 1.2,
+        iconAnchor: 'bottom',
       ),
     );
   }
 
   /// Draw a true-meters circle as a polygon fill around the user location.
-  Future<void> _drawSearchRadius() async {
+  Future<void> _drawSearchRadius([double? radiusKm]) async {
     if (_controller == null) return;
 
     // remove old fill
@@ -218,9 +306,9 @@ class _MapPageState extends ConsumerState<MapPage> {
       _radiusFill = null;
     }
 
-    final radiusKm = ref.read(mapFiltersProvider).radiusKm;
+    final effectiveRadiusKm = radiusKm ?? ref.read(mapFiltersProvider).radiusKm;
     final center = _userLocation ?? _initialCenter;
-    final polygon = _circlePolygon(center, radiusKm * 1000, 96);
+    final polygon = _circlePolygon(center, effectiveRadiusKm * 1000, 96);
 
     _radiusFill = await _controller!.addFill(
       FillOptions(
@@ -260,11 +348,59 @@ class _MapPageState extends ConsumerState<MapPage> {
   double _degToRad(double deg) => deg * (math.pi / 180.0);
   double _radToDeg(double rad) => rad * (180.0 / math.pi);
 
+  Future<void> _ensureCategoryLookup() async {
+    if (_reportCategorySlugLookup.isNotEmpty) return;
+    try {
+      final categories = await ref.read(reportCategoriesProvider.future);
+      for (final category in categories) {
+        final slug = resolveCategorySlug(category.slug) ??
+            resolveCategorySlug(category.name);
+        if (slug != null) {
+          _reportCategorySlugLookup[category.id] = slug;
+        }
+      }
+    } catch (err, stack) {
+      if (kDebugMode) {
+        debugPrint('Failed to resolve report category lookup: $err');
+        debugPrintStack(stackTrace: stack);
+      }
+    }
+  }
+
   // -------------------- Alerts refresh helper --------------------
 
   Future<void> _pullAlerts() async {
+    if (_controller == null) return;
+
     try {
-      final alerts = await ref.read(nearbyAlertsProvider.future);
+      final filters = ref.read(mapFiltersProvider);
+      final service = ref.read(supabaseAlertsServiceProvider);
+      final center = _userLocation ?? _initialCenter;
+
+      var alerts = await service.fetchNearby(
+        lat: center.latitude,
+        lng: center.longitude,
+        radiusKm: filters.radiusKm,
+      );
+
+      if (filters.categoryIds.isNotEmpty) {
+        await _ensureCategoryLookup();
+        final allowed = filters.categoryIds
+            .map((id) => _reportCategorySlugLookup[id])
+            .whereType<String>()
+            .map(canonicalizeSlug)
+      .toSet();
+        if (allowed.isNotEmpty) {
+          alerts = alerts
+              .where((alert) {
+                final slug = resolveCategorySlug(alert.category);
+                if (slug == null) return true;
+                return allowed.contains(canonicalizeSlug(slug));
+              })
+              .toList(growable: false);
+        }
+      }
+
       await _syncAlertMarkers(alerts);
     } catch (e, st) {
       if (kDebugMode) {
@@ -328,6 +464,9 @@ class _MapPageState extends ConsumerState<MapPage> {
               trackCameraPosition: true,
               onMapCreated: (controller) async {
                 _controller = controller;
+                _mapImagesLoaded = false;
+
+                await _ensureMapImagesLoaded();
 
                 controller.onSymbolTapped.add((symbol) {
                   if (_reportBySymbol.containsKey(symbol)) {
@@ -340,6 +479,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                   }
                   final spot = _savedSpotBySymbol[symbol];
                   if (spot != null) {
+                    unawaited(_highlightSavedSpot(symbol));
                     showSuccessToast(
                       context,
                       '${spot.name}\n${AppLocalizations.current.formatCoordinates(spot.lat, spot.lng)}',
@@ -474,7 +614,29 @@ class _RadiusSelector extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final display = selectedRadius.clamp(1, 20).toDouble();
+    final value = selectedRadius
+        .clamp(kMinSearchRadiusKm, kMaxSearchRadiusKm)
+        .toDouble();
+
+    String formatRadius(double radius) {
+      final l10n = AppLocalizations.current;
+      if (radius < 1) {
+        final meters = (radius * 1000).round();
+        return l10n.translate('{value} m', params: {
+          'value': meters.toString(),
+        });
+      }
+      final remainder = radius.remainder(1).abs();
+      final showDecimal = remainder > 0.001 && radius < 10;
+      final formatted = showDecimal
+          ? radius.toStringAsFixed(1)
+          : radius.round().toString();
+      return l10n.translate('{value} km', params: {
+        'value': formatted,
+      });
+    }
+
+    final label = formatRadius(value);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -499,22 +661,19 @@ class _RadiusSelector extends ConsumerWidget {
             children: [
               Expanded(
                 child: Slider.adaptive(
-                  min: 1,
-                  max: 20,
-                  divisions: 19,
-                  value: display,
-                  label: AppLocalizations.current.translate('{value} km',
-                      params: {'value': display.round().toString()}),
+                  min: kMinSearchRadiusKm,
+                  max: kMaxSearchRadiusKm,
+                  divisions:
+                      ((kMaxSearchRadiusKm - kMinSearchRadiusKm) / kRadiusStepKm)
+                          .round(),
+                  value: value,
+                  label: label,
                   onChanged: (v) =>
                       ref.read(mapFiltersProvider.notifier).setRadius(v),
                 ),
               ),
               const SizedBox(width: 12),
-              Text(
-                AppLocalizations.current.translate('{value} km',
-                    params: {'value': display.round().toString()}),
-                style: theme.textTheme.titleMedium,
-              ),
+              Text(label, style: theme.textTheme.titleMedium),
             ],
           ),
         ],

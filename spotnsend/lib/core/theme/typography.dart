@@ -4,44 +4,44 @@ import 'package:google_fonts/google_fonts.dart';
 import 'colors.dart';
 
 class AppTypography {
-  static TextStyle get headingLarge => GoogleFonts.montserrat(
+  static TextStyle get headingLarge => GoogleFonts.cairo(
         fontSize: 32,
         fontWeight: FontWeight.w700,
         letterSpacing: -0.5,
         color: AppColors.black,
       );
 
-  static TextStyle get headingMedium => GoogleFonts.montserrat(
+  static TextStyle get headingMedium => GoogleFonts.cairo(
         fontSize: 24,
         fontWeight: FontWeight.w700,
         color: AppColors.black,
       );
 
-  static TextStyle get headingSmall => GoogleFonts.montserrat(
+  static TextStyle get headingSmall => GoogleFonts.cairo(
         fontSize: 20,
         fontWeight: FontWeight.w600,
         color: AppColors.black,
       );
 
-  static TextStyle get bodyLarge => GoogleFonts.montserrat(
+  static TextStyle get bodyLarge => GoogleFonts.cairo(
         fontSize: 16,
         fontWeight: FontWeight.w500,
         color: AppColors.grey,
       );
 
-  static TextStyle get bodyMedium => GoogleFonts.montserrat(
+  static TextStyle get bodyMedium => GoogleFonts.cairo(
         fontSize: 14,
         fontWeight: FontWeight.w500,
         color: AppColors.grey,
       );
 
-  static TextStyle get bodySmall => GoogleFonts.montserrat(
+  static TextStyle get bodySmall => GoogleFonts.cairo(
         fontSize: 12,
         fontWeight: FontWeight.w500,
         color: AppColors.grey,
       );
 
-  static TextStyle get number => GoogleFonts.montserrat(
+  static TextStyle get number => GoogleFonts.cairo(
         fontSize: 18,
         fontWeight: FontWeight.w600,
         letterSpacing: 0.4,

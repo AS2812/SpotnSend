@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:spotnsend/core/utils/result.dart';
 import 'package:spotnsend/data/models/alert_models.dart';
 import 'package:spotnsend/data/services/supabase_alerts_service.dart';
 
@@ -42,5 +43,26 @@ class AlertsController extends AsyncNotifier<List<Alert>> {
     state = const AsyncLoading();
     final service = ref.read(supabaseAlertsServiceProvider);
     state = AsyncData(await service.fetchAll());
+  }
+
+  Future<bool> resolveAlert(String alertId) async {
+    final service = ref.read(supabaseAlertsServiceProvider);
+    final result = await service.resolveAlert(alertId);
+
+    if (result is Success<void>) {
+      final current = state.value ?? const <Alert>[];
+      final updated = current
+          .map((alert) => alert.id == alertId
+              ? alert.copyWith(
+                  status: AlertStatus.resolved,
+                  resolvedAt: DateTime.now(),
+                )
+              : alert)
+          .toList(growable: false);
+      state = AsyncData(updated);
+      return true;
+    }
+
+    return false;
   }
 }

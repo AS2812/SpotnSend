@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "nodemon --watch src --ext js,json --exec \"node src/server.js\"",
     "start": "node src/server.js",
-    "lint": "eslint src --ext .js"
+    "lint": "eslint src --ext .js",
+    "verify:functions": "node scripts/verifyFunctions.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

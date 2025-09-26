@@ -18,7 +18,6 @@ class NotificationsService {
 
   sb.RealtimeChannel? _channel;
 
-  sb.SupabaseQueryBuilder _tbl() => _client.from('notifications');
 
   dynamic _idValue(String id) => int.tryParse(id) ?? id; // bigint-safe
 
@@ -28,10 +27,8 @@ class NotificationsService {
     // Not signed in → empty (avoids RLS errors)
     if (_client.auth.currentUser == null) return const [];
 
-    final rows = await _tbl()
-        .select()
-        .filter('deleted_at', 'is', null) // ← hide deleted rows
-        .order('created_at', ascending: false) as List<dynamic>;
+    final result = await _client.rpc('notifications_me');
+    final rows = (result is List) ? result : const <dynamic>[];
 
     return rows
         .whereType<Map<String, dynamic>>()
@@ -42,11 +39,10 @@ class NotificationsService {
   /// Toggle a single notification read/unread via seen_at.
   Future<Result<void>> markRead(String id, {bool seen = true}) async {
     try {
-      final patch = {
-        'seen_at': seen ? DateTime.now().toUtc().toIso8601String() : null
-      };
-      final q = _tbl().update(patch).eq('notification_id', _idValue(id));
-      await q;
+      await _client.rpc('notifications_mark', params: {
+        'p_id': _idValue(id),
+        'p_seen': seen,
+      });
       return const Success(null);
     } on sb.PostgrestException catch (e) {
       return Failure(e.message);
@@ -58,9 +54,9 @@ class NotificationsService {
   /// Mark all visible (non-deleted) notifications read/unread.
   Future<Result<void>> markAll({bool seen = true}) async {
     try {
-      await _tbl().update({
-        'seen_at': seen ? DateTime.now().toUtc().toIso8601String() : null
-      }).filter('deleted_at', 'is', null); // only affect non-deleted
+      await _client.rpc('notifications_mark_all', params: {
+        'p_seen': seen,
+      });
       return const Success(null);
     } on sb.PostgrestException catch (e) {
       return Failure(e.message);
@@ -72,9 +68,12 @@ class NotificationsService {
   /// Soft delete a single notification (set deleted_at).
   Future<Result<void>> delete(String id) async {
     try {
-      await _tbl()
-          .update({'deleted_at': DateTime.now().toUtc().toIso8601String()})
-          .eq('notification_id', _idValue(id));
+      if (_client.auth.currentUser == null) {
+        return const Success(null);
+      }
+      await _client.rpc('notifications_delete', params: {
+        'p_id': _idValue(id),
+      });
       return const Success(null);
     } on sb.PostgrestException catch (e) {
       return Failure(e.message);
@@ -86,9 +85,7 @@ class NotificationsService {
   /// Soft delete all visible notifications.
   Future<Result<void>> deleteAll() async {
     try {
-      await _tbl().update({
-        'deleted_at': DateTime.now().toUtc().toIso8601String()
-      }).filter('deleted_at', 'is', null);
+      await _client.rpc('notifications_clear_all');
       return const Success(null);
     } on sb.PostgrestException catch (e) {
       return Failure(e.message);
@@ -116,7 +113,10 @@ class NotificationsService {
     }
 
     // Close previous channel
-    await _channel?.unsubscribe();
+    final previous = _channel;
+    if (previous != null) {
+      await previous.unsubscribe();
+    }
 
     // Unique channel name per user
     _channel = _client.channel('realtime:notifications:${userId ?? 'all'}');
@@ -143,10 +143,13 @@ class NotificationsService {
       );
     }
 
-    await _channel!.subscribe();
+    _channel!.subscribe();
     return () async {
-      await _channel?.unsubscribe();
+      final channel = _channel;
       _channel = null;
+      if (channel != null) {
+        await channel.unsubscribe();
+      }
     };
   }
 
@@ -157,8 +160,11 @@ class NotificationsService {
   }
 
   Future<void> dispose() async {
-    await _channel?.unsubscribe();
+    final channel = _channel;
     _channel = null;
+    if (channel != null) {
+      await channel.unsubscribe();
+    }
     _debounce?.cancel();
   }
 }

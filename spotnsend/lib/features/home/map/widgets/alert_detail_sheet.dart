@@ -218,10 +218,16 @@ class AlertDetailSheet extends ConsumerWidget {
   }
 
   Future<void> _resolveAlert(BuildContext context, WidgetRef ref) async {
-    await ref.read(alertsControllerProvider).resolveAlert(alert.id);
-    if (context.mounted) {
+    final success =
+        await ref.read(alertsControllerProvider.notifier).resolveAlert(alert.id);
+
+    if (!context.mounted) return;
+
+    if (success) {
       showSuccessToast(context, 'Alert marked as resolved.'.tr());
       Navigator.of(context).pop();
+    } else {
+      showErrorToast(context, 'Failed to resolve alert. Try again.'.tr());
     }
   }
 }

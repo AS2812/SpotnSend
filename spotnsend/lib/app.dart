@@ -32,10 +32,12 @@ class SpotnSendApp extends ConsumerWidget {
       routerConfig: router,
       // Fix yellow text during locale transition
       builder: (context, child) {
+        final locale = settingsState.locale;
+        final direction = locale.languageCode == 'ar'
+            ? TextDirection.rtl
+            : TextDirection.ltr;
         return Directionality(
-          textDirection: settingsState.locale.languageCode == 'ar'
-              ? TextDirection.rtl
-              : TextDirection.ltr,
+          textDirection: direction,
           child: child ?? const SizedBox(),
         );
       },

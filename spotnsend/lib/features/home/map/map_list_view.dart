@@ -7,6 +7,7 @@ import 'package:spotnsend/data/models/report_models.dart';
 import 'package:spotnsend/shared/widgets/app_button.dart';
 import 'package:spotnsend/shared/widgets/empty_state.dart';
 import 'package:spotnsend/features/home/map/providers/map_providers.dart';
+import 'package:spotnsend/features/home/map/category_icon_helpers.dart';
 import 'package:spotnsend/l10n/app_localizations.dart';
 
 class MapListView extends ConsumerWidget {
@@ -99,6 +100,7 @@ class _ReportTile extends StatelessWidget {
     // Optional: friendly labels (Report.model already handles parsing)
     final priority = report.priority.name; // low/normal/high/critical
     final status = report.status.name; // submitted/underReview/approved/...
+    final iconAsset = iconAssetForCategoryName(report.category);
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -118,8 +120,20 @@ class _ReportTile extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.report_gmailerrorred_rounded,
-                  color: theme.colorScheme.primary),
+              if (iconAsset != null)
+                Container(
+                  width: 40,
+                  height: 40,
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withOpacity(0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Image.asset(iconAsset, fit: BoxFit.contain),
+                )
+              else
+                Icon(Icons.report_gmailerrorred_rounded,
+                    color: theme.colorScheme.primary),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(

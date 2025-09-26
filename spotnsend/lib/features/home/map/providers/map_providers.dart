@@ -8,7 +8,13 @@ import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:spotnsend/data/models/report_models.dart';
 import 'package:spotnsend/data/services/maptiler_service.dart';
 import 'package:spotnsend/data/services/supabase_reports_service.dart';
+import 'package:spotnsend/features/home/account/providers/account_providers.dart';
 import 'package:spotnsend/main.dart';
+
+const double kDefaultSearchRadiusKm = 3;
+const double kMinSearchRadiusKm = 0.5;
+const double kMaxSearchRadiusKm = 30;
+const double kRadiusStepKm = 0.5;
 
 /// ----------------------
 /// Location permissions
@@ -56,15 +62,21 @@ class MapFiltersNotifier extends Notifier<ReportFilters> {
   @override
   ReportFilters build() {
     return const ReportFilters(
-      radiusKm: 3,
+      radiusKm: kDefaultSearchRadiusKm,
       categoryIds: <int>{},
       includeSavedSpots: true,
     );
   }
 
   void setRadius(double radiusKm) {
-    final clamped = radiusKm.clamp(1, 20).toDouble();
-    state = state.copyWith(radiusKm: clamped);
+    final clamped = radiusKm
+        .clamp(kMinSearchRadiusKm, kMaxSearchRadiusKm)
+        .toDouble();
+    final snapped =
+        (clamped / kRadiusStepKm).roundToDouble() * kRadiusStepKm;
+    state = state.copyWith(
+      radiusKm: double.parse(snapped.toStringAsFixed(2)),
+    );
   }
 
   void toggleCategory(int id) {
@@ -121,6 +133,8 @@ final mapReportsControllerProvider =
 
 class MapReportsController extends AsyncNotifier<List<Report>> {
   sb.RealtimeChannel? _channel;
+  int? _viewerUserId;
+  bool _viewerIsGovernment = false;
 
   // Current query params to keep realtime consistent with the UI.
   _QueryParams? _params;
@@ -146,8 +160,11 @@ class MapReportsController extends AsyncNotifier<List<Report>> {
 
     // Ensure cleanup
     ref.onDispose(() async {
-      await _channel?.unsubscribe();
+      final channel = _channel;
       _channel = null;
+      if (channel != null) {
+        await channel.unsubscribe();
+      }
     });
 
     return _reload();
@@ -166,6 +183,19 @@ class MapReportsController extends AsyncNotifier<List<Report>> {
     final radiusKm = filters.radiusKm;
     final categories = filters.categoryIds;
 
+    int? viewerId;
+    bool viewerIsGovernment = false;
+    try {
+      final user = await ref.read(accountUserProvider.future);
+      viewerId = user == null ? null : int.tryParse(user.id);
+      viewerIsGovernment = user?.isGovernment ?? false;
+    } catch (_) {
+      viewerId = null;
+      viewerIsGovernment = false;
+    }
+    _viewerUserId = viewerId;
+    _viewerIsGovernment = viewerIsGovernment;
+
     _params = _QueryParams(
       lat: lat,
       lng: lng,
@@ -173,19 +203,27 @@ class MapReportsController extends AsyncNotifier<List<Report>> {
       categoryIds: categories,
     );
 
-    // Load via RPC in the service (respects radius & categories)
     final data = await svc.fetchNearby(
       lat: lat,
       lng: lng,
       radiusKm: radiusKm,
       categoryIds: categories,
+      viewerIsGovernment: _viewerIsGovernment,
     );
 
-    // Start/refresh realtime after we know params
+    final visible = data.where(_canSee).toList(growable: false);
+
     _startRealtime();
 
-    state = AsyncData(data);
-    return data;
+    state = AsyncData(visible);
+    return visible;
+  }
+
+  bool _canSee(Report report) {
+    return report.canBeSeenBy(
+      userId: _viewerUserId,
+      isGovernment: _viewerIsGovernment,
+    );
   }
 
   void _startRealtime() {
@@ -197,6 +235,7 @@ class MapReportsController extends AsyncNotifier<List<Report>> {
     // INSERT / UPDATE: merge if it matches current filters
     void _upsert(Map<String, dynamic> row) {
       final r = Report.fromJson(row);
+      if (!_canSee(r)) return;
       final p = _params;
       if (p == null) return;
 
@@ -251,6 +290,7 @@ class MapReportsController extends AsyncNotifier<List<Report>> {
 
   /// Optional optimistic add from the submit flow
   void addOrReplace(Report r) {
+    if (!_canSee(r)) return;
     final p = _params;
     if (p != null) {
       if (!_categoryAllowed(r, p.categoryIds)) return;
@@ -276,6 +316,7 @@ final nearbyReportsProvider =
   final svc = ref.watch(supabaseReportServiceProvider);
   final filters = ref.watch(mapFiltersProvider);
   final loc = await ref.watch(currentLocationProvider.future);
+  final user = await ref.watch(accountUserProvider.future);
 
   const fallbackLat = 24.7136;
   const fallbackLng = 46.6753;
@@ -288,6 +329,7 @@ final nearbyReportsProvider =
     lng: lng,
     radiusKm: filters.radiusKm,
     categoryIds: filters.categoryIds,
+    viewerIsGovernment: user?.isGovernment ?? false,
   );
 });
 

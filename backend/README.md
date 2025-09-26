@@ -25,6 +25,16 @@ This service exposes the REST API, WebSocket notifications, and background helpe
    # edit .env with correct DATABASE_URL, JWT secrets, etc.
    ```
 
+### Verify Supabase/PostGIS functions
+
+Run the helper once you have a working connection string to make sure all required extensions and SQL functions are present (PostGIS, custom RPCs, triggers, etc.):
+
+```bash
+npm run verify:functions
+```
+
+The script inspects `pg_extension` and `pg_proc` for the full function list used by the backend and Flutter client (including `reports_nearby`, `create_report_simple`, PostGIS spatial operators, notification helpers, etc.). Missing items will be logged and the process exits with a non-zero status so you can surface issues in CI.
+
 ## Running locally
 
 ```bash

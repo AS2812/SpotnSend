@@ -43,7 +43,7 @@ class _ReportPageState extends ConsumerState<ReportPage> {
     super.initState();
     _descriptionController.text = ref.read(reportFormProvider).description;
     _formSubscription =
-        ref.listen<ReportFormData>(reportFormProvider, (previous, next) {
+        ref.listenManual<ReportFormData>(reportFormProvider, (previous, next) {
       if (_descriptionController.text != next.description) {
         _descriptionController.text = next.description;
       }
@@ -136,7 +136,7 @@ class _ReportPageState extends ConsumerState<ReportPage> {
 
           if (audience != ReportAudience.government) {
             final alertsService = ref.read(supabaseAlertsServiceProvider);
-            final alertResponse = await alertsService.createFromReport(
+            final alertResult = await alertsService.createFromReport(
               reportId: report.id,
               title: _humanize(report.subcategory.isNotEmpty
                   ? report.subcategory
@@ -154,9 +154,10 @@ class _ReportPageState extends ConsumerState<ReportPage> {
               severity: severity.name,
               notifyScope: audience.name,
             );
-            if (alertResponse is Failure<Alert>) {
-              alertError = alertResponse.message;
-            }
+            alertResult.when(
+              success: (_) {},
+              failure: (msg) => alertError = msg,
+            );
           }
 
           final successMessage = audience == ReportAudience.government

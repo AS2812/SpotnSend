@@ -23,6 +23,7 @@ dependencies:
   flutter_dotenv: ^5.1.0
   supabase_flutter: ^2.5.6
   qr_flutter: ^4.1.0
+  equatable: ^2.0.5
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -34,6 +35,8 @@ flutter:
     - assets/images/
     - fixtures/
     - .env
+    - assets/category_icons/
+    - assets/pins/
 
 flutter_launcher_icons:
   android: "launcher_icon"

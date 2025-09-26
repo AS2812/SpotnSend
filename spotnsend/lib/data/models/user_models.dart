@@ -10,6 +10,7 @@ class AppUser {
     required this.idNumber,
     required this.selfieUrl,
     required this.status,
+    this.role = 'user',
     this.reportsSubmitted = 0,
     this.feedbackGiven = 0,
     this.savedSpots = const [],
@@ -23,11 +24,14 @@ class AppUser {
   final String idNumber;
   final String selfieUrl;
   final VerificationStatus status;
+  final String role;
   final int reportsSubmitted;
   final int feedbackGiven;
   final List<SavedSpot> savedSpots;
 
   bool get isVerified => status == VerificationStatus.verified;
+  bool get isGovernment => role == 'government' || role == 'admin';
+  bool get isAdmin => role == 'admin';
 
   AppUser copyWith({
     String? id,
@@ -38,6 +42,7 @@ class AppUser {
     String? idNumber,
     String? selfieUrl,
     VerificationStatus? status,
+    String? role,
     int? reportsSubmitted,
     int? feedbackGiven,
     List<SavedSpot>? savedSpots,
@@ -51,6 +56,7 @@ class AppUser {
       idNumber: idNumber ?? this.idNumber,
       selfieUrl: selfieUrl ?? this.selfieUrl,
       status: status ?? this.status,
+      role: role ?? this.role,
       reportsSubmitted: reportsSubmitted ?? this.reportsSubmitted,
       feedbackGiven: feedbackGiven ?? this.feedbackGiven,
       savedSpots: savedSpots ?? this.savedSpots,
@@ -67,6 +73,7 @@ class AppUser {
         .toList();
 
     final savedSpotsJson = json['savedSpots'] ?? json['favoriteSpots'];
+    final roleRaw = (json['role'] ?? json['userRole'] ?? json['user_role'] ?? 'user').toString();
 
     return AppUser(
       id: (json['id'] ?? json['userId'] ?? json['user_id'] ?? '').toString(),
@@ -76,9 +83,10 @@ class AppUser {
       phone: phoneParts.join(' '),
       idNumber: (json['idNumber'] ?? json['id_number'] ?? '').toString(),
       selfieUrl: (json['selfieUrl'] ?? json['selfie_url'] ?? '').toString(),
-      status: statusRaw.toLowerCase() == 'verified'
+      status: statusRaw.trim().toLowerCase() == 'verified'
           ? VerificationStatus.verified
           : VerificationStatus.pending,
+      role: roleRaw.trim().toLowerCase(),
       reportsSubmitted: _coerceInt(json['reportsSubmitted'] ?? json['reports_count']) ?? 0,
       feedbackGiven: _coerceInt(json['feedbackGiven'] ?? json['feedback_count']) ?? 0,
       savedSpots: savedSpotsJson is List
@@ -100,6 +108,7 @@ class AppUser {
       'idNumber': idNumber,
       'selfieUrl': selfieUrl,
       'status': status.name,
+      'role': role,
       'reportsSubmitted': reportsSubmitted,
       'feedbackGiven': feedbackGiven,
       'savedSpots': savedSpots.map((spot) => spot.toJson()).toList(),

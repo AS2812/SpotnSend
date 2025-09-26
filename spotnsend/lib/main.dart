@@ -65,7 +65,6 @@ Future<void> _ensureProfileSilently() async {
 
   try {
     await supabase.rpc('ensure_profile', params: {
-      'p_username': (u.userMetadata?['username'] as String?) ?? '',
       'p_full_name': (u.userMetadata?['full_name'] as String?) ?? u.email ?? '',
       'p_email': u.email ?? '',
     });

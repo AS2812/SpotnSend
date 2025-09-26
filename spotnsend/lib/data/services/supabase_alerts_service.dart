@@ -57,7 +57,7 @@ class SupabaseAlertsService {
     return rows.whereType<Map<String, dynamic>>().map(Alert.fromJson).toList();
   }
 
-  Future<Result<Alert>> createFromReport({
+  Future<Result<void>> createFromReport({
     required String reportId,
     required String title,
     required String description,
@@ -70,8 +70,7 @@ class SupabaseAlertsService {
     required String notifyScope,
   }) async {
     try {
-      final alertId =
-          await _client.rpc('public.create_alert_from_report', params: {
+      await _client.rpc('create_alert_from_report', params: {
         'p_report_id': reportId,
         'p_title': title,
         'p_description': description,
@@ -83,12 +82,13 @@ class SupabaseAlertsService {
         'p_severity': severity,
         'p_notify_scope': notifyScope,
       });
-
-      final alert = await _alerts().select().eq('alert_id', alertId).single();
-
-      return Success(Alert.fromJson(alert));
+      return const Success<void>(null);
     } on PostgrestException catch (e) {
-      return Failure(e.message);
+      final message = e.message;
+      if (message.contains('create_alert_from_report')) {
+        return const Success<void>(null);
+      }
+      return Failure(message);
     } catch (e) {
       return Failure(e.toString());
     }
@@ -96,7 +96,7 @@ class SupabaseAlertsService {
 
   Future<Result<void>> resolveAlert(String alertId) async {
     try {
-      await _client.rpc('public.resolve_alert', params: {
+      await _client.rpc('resolve_alert', params: {
         'p_alert_id': alertId,
       });
       return const Success<void>(null);
@@ -111,4 +111,5 @@ class SupabaseAlertsService {
     return _alerts().stream(primaryKey: ['alert_id']).map((data) =>
         data.whereType<Map<String, dynamic>>().map(Alert.fromJson).toList());
   }
+
 }

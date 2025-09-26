@@ -5,10 +5,16 @@ enum ReportStatus { submitted, underReview, approved, rejected, archived }
 enum ReportPriority { low, normal, high, critical }
 
 class ReportCategory {
-  const ReportCategory({required this.id, required this.name, this.subcategories = const []});
+  const ReportCategory({
+    required this.id,
+    required this.name,
+    required this.slug,
+    this.subcategories = const [],
+  });
 
   final int id;
   final String name;
+  final String slug;
   final List<ReportSubcategory> subcategories;
 }
 
@@ -32,6 +38,8 @@ class Report {
     required this.status,
     required this.priority,
     required this.createdAt,
+    required this.notifyScope,
+    this.ownerUserId,
     this.distanceMeters,
     this.media,
   });
@@ -47,12 +55,16 @@ class Report {
   final ReportStatus status;
   final ReportPriority priority;
   final DateTime createdAt;
+  final ReportAudience notifyScope;
+  final int? ownerUserId;
   final double? distanceMeters;
   final List<ReportMedia>? media;
 
   factory Report.fromJson(Map<String, dynamic> json) {
     final statusRaw = (json['status'] ?? json['reportStatus'] ?? 'submitted').toString().toLowerCase();
     final priorityRaw = (json['priority'] ?? 'normal').toString().toLowerCase();
+    final scopeRaw = (json['notify_scope'] ?? json['notifyScope'] ?? json['notify'] ?? 'people').toString().toLowerCase();
+    final ownerId = _coerceInt(json['user_id'] ?? json['userId'] ?? json['reportUserId'] ?? json['report_user_id'] ?? json['owner_user_id'] ?? json['created_by']);
     return Report(
       id: (json['id'] ?? json['reportId'] ?? json['report_id'] ?? '').toString(),
       categoryId: _coerceInt(json['categoryId'] ?? json['category_id']) ?? 0,
@@ -65,6 +77,8 @@ class Report {
       status: _parseStatus(statusRaw),
       priority: _parsePriority(priorityRaw),
       createdAt: DateTime.tryParse((json['createdAt'] ?? json['created_at'] ?? DateTime.now().toIso8601String()).toString()) ?? DateTime.now(),
+      notifyScope: _parseAudience(scopeRaw),
+      ownerUserId: ownerId,
       distanceMeters: _coerceDouble(json['distanceMeters'] ?? json['distance_meters']),
       media: (json['media'] ?? json['mediaItems']) is List
           ? (json['media'] ?? json['mediaItems'])
@@ -78,6 +92,14 @@ class Report {
   String get category => categoryName;
 
   String get subcategory => subcategoryName ?? '';
+
+  bool get isGovernmentOnly => notifyScope == ReportAudience.government;
+
+  bool canBeSeenBy({int? userId, bool isGovernment = false}) {
+    if (!isGovernmentOnly) return true;
+    if (isGovernment) return true;
+    return userId != null && ownerUserId != null && ownerUserId == userId;
+  }
 
   List<String> get mediaUrls =>
       (media == null || media!.isEmpty) ? const [] : media!.map((item) => item.url).toList(growable: false);
@@ -203,6 +225,18 @@ class ReportFilters {
     );
   }
 }
+
+ReportAudience _parseAudience(String value) {
+  switch (value) {
+    case 'government':
+      return ReportAudience.government;
+    case 'both':
+      return ReportAudience.both;
+    default:
+      return ReportAudience.people;
+  }
+}
+
 
 ReportStatus _parseStatus(String value) {
   switch (value) {
