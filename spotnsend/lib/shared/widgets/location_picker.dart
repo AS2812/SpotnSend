@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import 'package:spotnsend/features/home/map/providers/map_providers.dart';
@@ -24,25 +25,63 @@ class _LocationPickerState extends ConsumerState<LocationPicker> {
   MaplibreMapController? _controller;
   LatLng? _selectedLocation;
   Symbol? _selectedSymbol;
+  static const _selectionIconKey = 'location-picker-selection';
 
   @override
   void initState() {
     super.initState();
     _selectedLocation = widget.initialLocation;
+    _primeInitialLocation();
+  }
+
+  Future<void> _primeInitialLocation() async {
+    if (_selectedLocation != null) return;
+    try {
+      final location = await ref.read(currentLocationProvider.future);
+      final lat = location?.latitude;
+      final lng = location?.longitude;
+      if (lat != null && lng != null) {
+        setState(() {
+          _selectedLocation = LatLng(lat, lng);
+        });
+      }
+    } catch (_) {
+      // ignore; fallback to default camera
+    }
   }
 
   Future<void> _onMapCreated(MaplibreMapController controller) async {
     _controller = controller;
+    await _ensureSelectionIcon();
 
-    // Add initial marker if location is provided
-    if (widget.initialLocation != null) {
-      await _addMarker(widget.initialLocation!);
+    final initial = _selectedLocation ?? widget.initialLocation;
+    if (initial != null) {
+      await controller.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(target: initial, zoom: 15),
+        ),
+      );
+      await _addMarker(initial);
     }
 
     // Set up tap handler
     _controller!.onSymbolTapped.add((symbol) {
       // Allow tapping the existing marker to move it
     });
+  }
+
+  Future<void> _ensureSelectionIcon() async {
+    if (_controller == null) return;
+    if (await _controller!.hasImage(_selectionIconKey)) return;
+    try {
+      final bytes = await rootBundle.load('assets/pins/select.png');
+      await _controller!.addImage(
+        _selectionIconKey,
+        bytes.buffer.asUint8List(),
+      );
+    } catch (_) {
+      // silently fall back to default glyph
+    }
   }
 
   void _onMapTapped(LatLng coordinates) async {
@@ -60,15 +99,39 @@ class _LocationPickerState extends ConsumerState<LocationPicker> {
       await _controller!.removeSymbol(_selectedSymbol!);
     }
 
-    // Add new marker
+    await _ensureSelectionIcon();
+    final hasCustomIcon = await _controller!.hasImage(_selectionIconKey);
+    final icon = hasCustomIcon ? _selectionIconKey : 'marker-15';
     _selectedSymbol = await _controller!.addSymbol(
       SymbolOptions(
         geometry: location,
-        iconImage: 'marker-15',
+        iconImage: icon,
         iconColor: '#2196F3',
-        iconSize: 0.9,
+        iconSize: icon == _selectionIconKey ? 0.65 : 0.9,
+        iconAnchor: 'bottom',
       ),
     );
+  }
+
+  Future<void> _centerOnCurrentLocation() async {
+    try {
+      final location = await ref.read(currentLocationProvider.future);
+      final lat = location?.latitude;
+      final lng = location?.longitude;
+      if (lat == null || lng == null) return;
+      final target = LatLng(lat, lng);
+      await _controller?.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(target: target, zoom: 15.5),
+        ),
+      );
+      setState(() {
+        _selectedLocation = target;
+      });
+      await _addMarker(target);
+    } catch (_) {
+      // ignore when location unavailable
+    }
   }
 
   @override
@@ -96,12 +159,23 @@ class _LocationPickerState extends ConsumerState<LocationPicker> {
             onMapCreated: _onMapCreated,
             onMapClick: (_, coordinates) => _onMapTapped(coordinates),
             initialCameraPosition: CameraPosition(
-              target: widget.initialLocation ?? const LatLng(24.7136, 46.6753),
+              target: _selectedLocation ??
+                  widget.initialLocation ??
+                  const LatLng(24.7136, 46.6753),
               zoom: 14,
             ),
             myLocationEnabled: true,
             myLocationTrackingMode: MyLocationTrackingMode.none,
             myLocationRenderMode: MyLocationRenderMode.gps,
+          ),
+          Positioned(
+            bottom: 24,
+            right: 16,
+            child: FloatingActionButton.small(
+              heroTag: 'picker-my-location',
+              onPressed: _centerOnCurrentLocation,
+              child: const Icon(Icons.my_location),
+            ),
           ),
           // Instructions overlay
           Positioned(

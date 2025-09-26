@@ -139,26 +139,59 @@ class _ReportPageState extends ConsumerState<ReportPage> {
 
     if (!formState.useCurrentLocation &&
         (formState.selectedLat == null || formState.selectedLng == null)) {
-      showErrorToast(
-        context,
-        'Select a location on the map before submitting.'.tr(),
+      LatLng? initial;
+      if (formState.selectedLat != null && formState.selectedLng != null) {
+        initial = LatLng(formState.selectedLat!, formState.selectedLng!);
+      } else {
+        try {
+          final location = await ref.read(currentLocationProvider.future);
+          final lat = location?.latitude;
+          final lng = location?.longitude;
+          if (lat != null && lng != null) {
+            initial = LatLng(lat, lng);
+          }
+        } catch (_) {
+          // ignore; user will choose manually
+        }
+      }
+
+      final picked = await context.showLocationPicker(
+        initialLocation: initial,
       );
-      return;
+      if (picked == null) {
+        showErrorToast(
+          context,
+          'Select a location on the map before submitting.'.tr(),
+        );
+        return;
+      }
+      ref
+          .read(reportFormProvider.notifier)
+          .setCoordinates(picked.latitude, picked.longitude);
+      formState = ref.read(reportFormProvider);
     }
 
     if (formState.useCurrentLocation) {
-      final location = await ref.read(currentLocationProvider.future);
-      final lat = location?.latitude;
-      final lng = location?.longitude;
-      if (lat == null || lng == null) {
+      try {
+        final location = await ref.read(currentLocationProvider.future);
+        final lat = location?.latitude;
+        final lng = location?.longitude;
+        if (lat == null || lng == null) {
+          showErrorToast(
+            context,
+            'Turn on location services to submit a report.'.tr(),
+          );
+          return;
+        }
+        ref.read(reportFormProvider.notifier).setCoordinates(lat, lng);
+        formState = ref.read(reportFormProvider);
+      } catch (_) {
         showErrorToast(
           context,
           'Turn on location services to submit a report.'.tr(),
         );
         return;
       }
-      ref.read(reportFormProvider.notifier).setCoordinates(lat, lng);
-      formState = ref.read(reportFormProvider);
     }
 
     final confirm = await showConfirmDialog(
@@ -398,19 +431,69 @@ class _ReportPageState extends ConsumerState<ReportPage> {
                     title: Text('Use current location'.tr()),
                     subtitle: Text('Disable to drop a manual pin later.'.tr()),
                     value: formState.useCurrentLocation,
-                    onChanged: (value) {
+                    onChanged: (value) async {
                       final notifier = ref.read(reportFormProvider.notifier);
-                      notifier.setUseCurrentLocation(value);
                       if (value) {
-                        ref
-                            .read(currentLocationProvider.future)
-                            .then((location) {
+                        notifier.setUseCurrentLocation(true);
+                        try {
+                          final location =
+                              await ref.read(currentLocationProvider.future);
                           final lat = location?.latitude;
                           final lng = location?.longitude;
                           if (lat != null && lng != null) {
                             notifier.setCoordinates(lat, lng);
                           }
-                        });
+                        } catch (_) {
+                          // ignore when location services are unavailable
+                        }
+                        return;
+                      }
+
+                      final currentForm = ref.read(reportFormProvider);
+                      LatLng? initial;
+                      if (currentForm.selectedLat != null &&
+                          currentForm.selectedLng != null) {
+                        initial = LatLng(
+                          currentForm.selectedLat!,
+                          currentForm.selectedLng!,
+                        );
+                      } else {
+                        try {
+                          final location =
+                              await ref.read(currentLocationProvider.future);
+                          final lat = location?.latitude;
+                          final lng = location?.longitude;
+                          if (lat != null && lng != null) {
+                            initial = LatLng(lat, lng);
+                          }
+                        } catch (_) {
+                          // ignore; use default map center
+                        }
+                      }
+
+                      final picked = await context.showLocationPicker(
+                        initialLocation: initial,
+                      );
+                      if (picked != null) {
+                        notifier.setUseCurrentLocation(false);
+                        notifier.setCoordinates(
+                          picked.latitude,
+                          picked.longitude,
+                        );
+                        return;
+                      }
+
+                      notifier.setUseCurrentLocation(true);
+                      try {
+                        final location =
+                            await ref.read(currentLocationProvider.future);
+                        final lat = location?.latitude;
+                        final lng = location?.longitude;
+                        if (lat != null && lng != null) {
+                          notifier.setCoordinates(lat, lng);
+                        }
+                      } catch (_) {
+                        // ignore when GPS is unavailable
                       }
                     },
                   ),

@@ -169,7 +169,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         SymbolOptions(
           geometry: LatLng(report.lat, report.lng),
           iconImage: iconKey ?? 'marker-15',
-          iconSize: iconKey != null ? 0.58 : 0.92,
+          iconSize: iconKey != null ? 0.46 : 0.72,
           iconAnchor: 'bottom',
         ),
       );
@@ -197,7 +197,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         SymbolOptions(
           geometry: LatLng(spot.lat, spot.lng),
           iconImage: _savedSpotIconKey,
-          iconSize: 0.7,
+          iconSize: 0.55,
           iconAnchor: 'bottom',
         ),
       );
@@ -215,7 +215,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         _activeSavedSpotSymbol!,
         SymbolOptions(
           iconImage: _savedSpotIconKey,
-          iconSize: 0.9,
+          iconSize: 0.55,
           iconAnchor: 'bottom',
         ),
       );
@@ -225,7 +225,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       symbol,
       SymbolOptions(
         iconImage: _savedSpotSelectedIconKey,
-        iconSize: 0.85,
+        iconSize: 0.68,
         iconAnchor: 'bottom',
       ),
     );
@@ -244,7 +244,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         geometry: at,
         iconImage: 'marker-15',
         iconColor: '#4CAF50', // green
-        iconSize: 1.0,
+        iconSize: 0.8,
         iconAnchor: 'bottom',
       ),
     );
@@ -284,7 +284,7 @@ class _MapPageState extends ConsumerState<MapPage> {
 
     final pts = <LatLng>[];
     for (int i = 0; i <= steps; i++) {
-      final brg = 2 * math.pi * (i / steps); // 0..2π
+      final brg = 2 * math.pi * (i / steps); // 0..2Ï€
       final lat2 = math.asin(
         math.sin(lat) * math.cos(dByR) +
             math.cos(lat) * math.sin(dByR) * math.cos(brg),

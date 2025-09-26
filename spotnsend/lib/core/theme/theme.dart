@@ -25,15 +25,15 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.white.withOpacity(0.9),
+  fillColor: AppColors.white.withValues(alpha: 0.9),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: AppColors.grey.withOpacity(0.3)),
+          borderSide: BorderSide(color: AppColors.grey.withValues(alpha: 0.3)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: AppColors.grey.withOpacity(0.2)),
+          borderSide: BorderSide(color: AppColors.grey.withValues(alpha: 0.2)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
@@ -52,8 +52,8 @@ class AppTheme {
         ).merge(
           ButtonStyle(
             backgroundColor: WidgetStateProperty.resolveWith(
-              (states) => states.contains(WidgetState.disabled)
-                  ? AppColors.grey.withOpacity(0.4)
+        (states) => states.contains(WidgetState.disabled)
+          ? AppColors.grey.withValues(alpha: 0.4)
                   : AppColors.primaryBlue,
             ),
             foregroundColor: WidgetStateProperty.all(AppColors.white),
@@ -63,7 +63,7 @@ class AppTheme {
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: AppColors.white,
         selectedItemColor: AppColors.primaryBlue,
-        unselectedItemColor: AppColors.grey.withOpacity(0.7),
+  unselectedItemColor: AppColors.grey.withValues(alpha: 0.7),
         selectedLabelStyle: AppTypography.bodySmall.copyWith(fontWeight: FontWeight.w600),
         unselectedLabelStyle: AppTypography.bodySmall,
         type: BottomNavigationBarType.fixed,
@@ -71,7 +71,7 @@ class AppTheme {
       ),
       chipTheme: base.chipTheme.copyWith(
         backgroundColor: AppColors.white,
-        selectedColor: AppColors.primaryBlue.withOpacity(0.12),
+  selectedColor: AppColors.primaryBlue.withValues(alpha: 0.12),
         labelStyle: AppTypography.bodySmall,
         secondaryLabelStyle: AppTypography.bodySmall.copyWith(color: AppColors.white),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -83,9 +83,9 @@ class AppTheme {
         contentTextStyle: AppTypography.bodyMedium,
       ),
       cardTheme: CardThemeData(
-        color: AppColors.white.withOpacity(0.9),
+  color: AppColors.white.withValues(alpha: 0.9),
         elevation: 2,
-        shadowColor: AppColors.primaryIndigo.withOpacity(0.1),
+  shadowColor: AppColors.primaryIndigo.withValues(alpha: 0.1),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
     );
@@ -100,7 +100,7 @@ class AppTheme {
         secondary: AppColors.primaryMagenta,
         surface: const Color(0xFF111217),
         error: AppColors.error,
-        outline: AppColors.grey.withOpacity(0.5),
+  outline: AppColors.grey.withValues(alpha: 0.5),
         brightness: Brightness.dark,
       ),
       textTheme: AppTypography.buildTextTheme(Brightness.dark),
@@ -114,7 +114,7 @@ class AppTheme {
         fillColor: const Color(0xFF1C1D24),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: AppColors.white.withOpacity(0.1)),
+          borderSide: BorderSide(color: AppColors.white.withValues(alpha: 0.1)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
@@ -124,18 +124,18 @@ class AppTheme {
       elevatedButtonTheme: light.elevatedButtonTheme,
       bottomNavigationBarTheme: light.bottomNavigationBarTheme.copyWith(
         backgroundColor: const Color(0xFF111217),
-        unselectedItemColor: AppColors.white.withOpacity(0.6),
+  unselectedItemColor: AppColors.white.withValues(alpha: 0.6),
       ),
       chipTheme: light.chipTheme.copyWith(
         backgroundColor: const Color(0xFF1C1D24),
-        selectedColor: AppColors.primaryBlue.withOpacity(0.25),
-        labelStyle: AppTypography.bodySmall.copyWith(color: AppColors.white.withOpacity(0.8)),
+  selectedColor: AppColors.primaryBlue.withValues(alpha: 0.25),
+  labelStyle: AppTypography.bodySmall.copyWith(color: AppColors.white.withValues(alpha: 0.8)),
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: const Color(0xFF1C1D24),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         titleTextStyle: AppTypography.headingSmall.copyWith(color: AppColors.white),
-        contentTextStyle: AppTypography.bodyMedium.copyWith(color: AppColors.white.withOpacity(0.8)),
+  contentTextStyle: AppTypography.bodyMedium.copyWith(color: AppColors.white.withValues(alpha: 0.8)),
       ),
       cardTheme: CardThemeData(
         color: const Color(0xFF1C1D24),

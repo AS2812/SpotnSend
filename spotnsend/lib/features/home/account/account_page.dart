@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:maplibre_gl/maplibre_gl.dart';
 
 import 'package:spotnsend/shared/widgets/app_badge.dart';
 import 'package:spotnsend/shared/widgets/app_button.dart';
 import 'package:spotnsend/shared/widgets/location_picker.dart';
 import 'package:spotnsend/shared/widgets/toasts.dart';
+import 'package:spotnsend/features/home/map/providers/map_providers.dart';
 import 'package:spotnsend/features/home/account/providers/account_providers.dart';
 import 'package:spotnsend/data/models/user_models.dart';
 import 'package:spotnsend/l10n/app_localizations.dart';
@@ -29,7 +31,7 @@ class AccountPage extends ConsumerWidget {
                   textAlign: TextAlign.center),
               const SizedBox(height: 16),
               AppButton(
-                label: 'Try again'.tr(), // no �Reload profile� anymore
+                label: 'Try again'.tr(), // no ï¿½Reload profileï¿½ anymore
                 onPressed: () => ref.invalidate(accountUserProvider),
               ),
             ],
@@ -342,7 +344,21 @@ class _SavedSpotsSection extends ConsumerWidget {
   }
 
   Future<void> _addSpot(BuildContext context, WidgetRef ref) async {
-    final selectedLocation = await context.showLocationPicker();
+    LatLng? initial;
+    try {
+      final location = await ref.read(currentLocationProvider.future);
+      final lat = location?.latitude;
+      final lng = location?.longitude;
+      if (lat != null && lng != null) {
+        initial = LatLng(lat, lng);
+      }
+    } catch (_) {
+      // ignore and fall back to default center
+    }
+
+    final selectedLocation = await context.showLocationPicker(
+      initialLocation: initial,
+    );
     if (selectedLocation == null) return;
 
     final nameController = TextEditingController();

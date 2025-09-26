@@ -32,8 +32,18 @@ class SupabaseAlertsService {
           .whereType<Map<String, dynamic>>()
           .map(Alert.fromJson)
           .toList();
-    } catch (e) {
-      // Fallback to basic query if RPC doesn't exist
+    } on PostgrestException catch (e) {
+      if (_isMissingAlertsTable(e)) {
+        return const [];
+      }
+      return _fallbackAlertsList();
+    } catch (_) {
+      return _fallbackAlertsList();
+    }
+  }
+
+  Future<List<Alert>> _fallbackAlertsList() async {
+    try {
       final rows = await _alerts()
           .select()
           .eq('status', 'active')
@@ -44,7 +54,20 @@ class SupabaseAlertsService {
           .whereType<Map<String, dynamic>>()
           .map(Alert.fromJson)
           .toList();
+    } on PostgrestException catch (e) {
+      if (_isMissingAlertsTable(e)) {
+        return const [];
+      }
+      rethrow;
     }
+  }
+
+  bool _isMissingAlertsTable(PostgrestException e) {
+    final code = e.code ?? '';
+    final message = e.message.toLowerCase();
+    return code == 'PGRST205' ||
+        (message.contains('could not find the table') &&
+            message.contains('alerts'));
   }
 
   Future<List<Alert>> fetchAll({int limit = 50}) async {
@@ -88,7 +111,7 @@ class SupabaseAlertsService {
       if (message.contains('create_alert_from_report')) {
         return const Success<void>(null);
       }
-      return Failure(message);
+      return Failure(message.isNotEmpty ? message : 'Unknown Supabase error');
     } catch (e) {
       return Failure(e.toString());
     }
@@ -111,5 +134,4 @@ class SupabaseAlertsService {
     return _alerts().stream(primaryKey: ['alert_id']).map((data) =>
         data.whereType<Map<String, dynamic>>().map(Alert.fromJson).toList());
   }
-
 }

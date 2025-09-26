@@ -51,7 +51,7 @@ class AppTypography {
   static TextTheme buildTextTheme(Brightness brightness) {
     final isDark = brightness == Brightness.dark;
     final baseColor = isDark ? AppColors.white : AppColors.black;
-    final secondaryColor = isDark ? AppColors.white.withOpacity(0.7) : AppColors.grey;
+  final secondaryColor = isDark ? AppColors.white.withValues(alpha: 0.7) : AppColors.grey;
 
     return TextTheme(
       displayLarge: headingLarge.copyWith(color: baseColor),

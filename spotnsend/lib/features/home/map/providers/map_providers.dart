@@ -349,25 +349,64 @@ final mapAlertsProvider = FutureProvider.autoDispose<List<Alert>>((ref) async {
   final lat = (loc?.latitude ?? fallbackLat).toDouble();
   final lng = (loc?.longitude ?? fallbackLng).toDouble();
 
-  final alerts = await svc.fetchNearby(
-    lat: lat,
-    lng: lng,
-    radiusKm: filters.radiusKm,
-  );
+  try {
+    final alerts = await svc.fetchNearby(
+      lat: lat,
+      lng: lng,
+      radiusKm: filters.radiusKm,
+    );
 
-  final activeAlerts = alerts
-      .where((alert) => alert.status == AlertStatus.active)
-      .toList()
-    ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final activeAlerts = alerts
+        .where((alert) => alert.status == AlertStatus.active)
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-  return activeAlerts;
+    return activeAlerts;
+  } on sb.PostgrestException catch (e) {
+    final message = (e.message ?? '').toLowerCase();
+    if (e.code == 'PGRST205' || message.contains('could not find the table')) {
+      return const <Alert>[];
+    }
+    rethrow;
+  } catch (_) {
+    return const <Alert>[];
+  }
 });
 
 final mapListContentProvider =
-    FutureProvider.autoDispose<MapListContent>((ref) async {
-  final reports = await ref.watch(mapReportsControllerProvider.future);
-  final savedSpots = await ref.watch(accountSavedSpotsProvider.future);
-  final alerts = await ref.watch(mapAlertsProvider.future);
+    Provider.autoDispose<AsyncValue<MapListContent>>((ref) {
+  final reportsAsync = ref.watch(mapReportsControllerProvider);
+  final savedSpotsAsync = ref.watch(accountSavedSpotsProvider);
+  final alertsAsync = ref.watch(mapAlertsProvider);
+
+  if (reportsAsync.isLoading ||
+      savedSpotsAsync.isLoading ||
+      alertsAsync.isLoading) {
+    return const AsyncValue<MapListContent>.loading();
+  }
+
+  Object? error;
+  StackTrace? stack;
+  reportsAsync.whenOrNull(error: (err, st) {
+    error ??= err;
+    stack ??= st;
+  });
+  savedSpotsAsync.whenOrNull(error: (err, st) {
+    error ??= err;
+    stack ??= st;
+  });
+  alertsAsync.whenOrNull(error: (err, st) {
+    error ??= err;
+    stack ??= st;
+  });
+
+  if (error != null) {
+    return AsyncValue<MapListContent>.error(error!, stack ?? StackTrace.empty);
+  }
+
+  final reports = reportsAsync.value ?? const <Report>[];
+  final savedSpots = savedSpotsAsync.value ?? const <SavedSpot>[];
+  final alerts = alertsAsync.value ?? const <Alert>[];
 
   final activeReports = reports.where((report) => report.isActive).toList()
     ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -386,11 +425,13 @@ final mapListContentProvider =
       .toList()
     ..sort((a, b) => b.reports.length.compareTo(a.reports.length));
 
-  return MapListContent(
+  final content = MapListContent(
     savedSpotSummaries: savedSummaries,
     reports: activeReports,
     alerts: alerts,
   );
+
+  return AsyncValue<MapListContent>.data(content);
 });
 
 class MapListContent {
@@ -442,7 +483,7 @@ bool _categoryAllowed(Report r, Set<int> catIds) {
   return cid != null ? catIds.contains(cid) : true;
 }
 
-/// Haversine distance (meters) – used to filter realtime events client-side
+/// Haversine distance (meters) â€“ used to filter realtime events client-side
 double _distanceMeters(
   double lat1,
   double lon1,

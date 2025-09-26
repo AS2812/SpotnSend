@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -24,8 +26,12 @@ class MapListView extends ConsumerWidget {
       ref.invalidate(mapReportsControllerProvider);
       ref.invalidate(accountSavedSpotsProvider);
       ref.invalidate(mapAlertsProvider);
-      // wait for new data so the refresh indicator feels responsive
-      await ref.read(mapListContentProvider.future);
+      // wait for dependent futures so the refresh indicator feels responsive
+      await Future.wait([
+        ref.read(mapReportsControllerProvider.future),
+        ref.read(accountSavedSpotsProvider.future),
+        ref.read(mapAlertsProvider.future),
+      ]);
     }
 
     return Scaffold(
