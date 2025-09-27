@@ -23,6 +23,7 @@ class AuthState {
   final sb.User? user;
   final String? draftNationalId;
   final String? draftGender;
+  final String? pendingEmailOtp;
 
   const AuthState({
     this.isAuthenticated = false,
@@ -33,6 +34,7 @@ class AuthState {
     this.user,
     this.draftNationalId,
     this.draftGender,
+    this.pendingEmailOtp,
   });
 
   AuthState copyWith({
@@ -44,6 +46,7 @@ class AuthState {
     sb.User? user,
     Object? draftNationalId = _authSentinel,
     Object? draftGender = _authSentinel,
+    Object? pendingEmailOtp = _authSentinel,
   }) {
     return AuthState(
       isAuthenticated: isAuthenticated ?? this.isAuthenticated,
@@ -59,6 +62,9 @@ class AuthState {
       draftGender: identical(draftGender, _authSentinel)
           ? this.draftGender
           : draftGender as String?,
+      pendingEmailOtp: identical(pendingEmailOtp, _authSentinel)
+          ? this.pendingEmailOtp
+          : pendingEmailOtp as String?,
     );
   }
 }
@@ -68,6 +74,7 @@ class AuthNotifier extends Notifier<AuthState> {
   bool _signingIn = false;
   bool _initialized = false;
   bool _accountListenerAttached = false;
+  bool _emailSignUpInitiated = false;
   SignupStep1Data? _step1Data;
   SignupStep2Data? _step2Data;
 
@@ -75,14 +82,14 @@ class AuthNotifier extends Notifier<AuthState> {
   AuthState build() {
     if (!_accountListenerAttached) {
       _accountListenerAttached = true;
-      ref.listen<AsyncValue<AppUser?>>(accountUserProvider,
-          (previous, next) {
-        next.whenData((user) {
-          final pending = user == null ? false : !user.isVerified;
-          if (state.isPendingVerification != pending) {
-            state = state.copyWith(isPendingVerification: pending);
-          }
-        });
+      ref.listen<bool>(isAccountVerifiedProvider, (previous, next) {
+        final pending = !next;
+        if (state.isPendingVerification != pending) {
+          state = state.copyWith(
+            isPendingVerification: pending,
+            pendingEmailOtp: pending ? state.pendingEmailOtp : null,
+          );
+        }
       });
     }
     _initialize();
@@ -103,8 +110,8 @@ class AuthNotifier extends Notifier<AuthState> {
   Future<void> _checkCurrentSession() async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-  final session = supabase.auth.currentSession;
-  final user = supabase.auth.currentUser;
+      final session = supabase.auth.currentSession;
+      final user = supabase.auth.currentUser;
 
       if (!state.keepSignedIn && session != null) {
         await supabase.auth.signOut();
@@ -117,13 +124,12 @@ class AuthNotifier extends Notifier<AuthState> {
         return;
       }
 
+      final pending = session == null ? false : !_isVerifiedFromAuthUser(user);
       state = state.copyWith(
         isAuthenticated: session != null,
         isLoading: false,
         user: user,
-        isPendingVerification: session == null
-            ? false
-            : state.isPendingVerification,
+        isPendingVerification: pending,
       );
     } catch (e) {
       state = state.copyWith(
@@ -215,6 +221,7 @@ class AuthNotifier extends Notifier<AuthState> {
         error: null,
         draftNationalId: data.nationalId ?? state.draftNationalId,
         draftGender: data.gender ?? state.draftGender,
+        pendingEmailOtp: data.otp.isNotEmpty ? data.otp : state.pendingEmailOtp,
       );
       return true;
     } catch (e) {
@@ -232,8 +239,71 @@ class AuthNotifier extends Notifier<AuthState> {
         error: null,
         draftNationalId: data.idNumber ?? state.draftNationalId,
         draftGender: data.gender ?? state.draftGender,
+        pendingEmailOtp: data.verificationCode.isNotEmpty
+            ? data.verificationCode
+            : state.pendingEmailOtp,
       );
       return true;
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+      return false;
+    }
+  }
+
+  Future<bool> sendSignupVerificationCode() async {
+    final step1 = _step1Data;
+    if (step1 == null) {
+      state = state.copyWith(
+        error: 'Please complete the previous step first.',
+      );
+      return false;
+    }
+
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      if (!_emailSignUpInitiated) {
+        final metadata = <String, dynamic>{
+          'full_name': step1.fullName,
+          'username': step1.username,
+          'phone_country_code': step1.phoneCountryCode,
+          'phone_number': step1.phoneNumber,
+          if (step1.nationalId?.isNotEmpty ?? false)
+            'id_number': step1.nationalId,
+          if (step1.gender?.isNotEmpty ?? false) 'gender': step1.gender,
+        };
+        try {
+          final response = await supabase.auth.signUp(
+            email: step1.email,
+            password: step1.password,
+            data: metadata,
+          );
+          _emailSignUpInitiated = true;
+          if (response.session != null) {
+            await supabase.auth.signOut();
+          }
+        } on sb.AuthException catch (e) {
+          if (e.message.toLowerCase().contains('already registered')) {
+            _emailSignUpInitiated = true;
+            await supabase.auth.resend(
+              type: sb.OtpType.signup,
+              email: step1.email,
+            );
+          } else {
+            rethrow;
+          }
+        }
+      } else {
+        await supabase.auth.resend(
+          type: sb.OtpType.signup,
+          email: step1.email,
+        );
+      }
+
+      state = state.copyWith(isLoading: false, error: null);
+      return true;
+    } on sb.AuthException catch (e) {
+      state = state.copyWith(isLoading: false, error: e.message);
+      return false;
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
       return false;
@@ -271,28 +341,74 @@ class AuthNotifier extends Notifier<AuthState> {
         if (step2.gender?.isNotEmpty ?? false) 'gender_step2': step2.gender,
       };
 
-      final signUpResponse = await supabase.auth.signUp(
-        email: step1.email,
-        password: step1.password,
-        data: metadata,
-      );
+      sb.User? user;
+      sb.Session? session;
 
-      sb.User? user = signUpResponse.user;
-      sb.Session? session = signUpResponse.session;
+      if (!_emailSignUpInitiated) {
+        try {
+          final signUpResponse = await supabase.auth.signUp(
+            email: step1.email,
+            password: step1.password,
+            data: metadata,
+          );
+          user = signUpResponse.user;
+          session = signUpResponse.session;
+          _emailSignUpInitiated = true;
+          if (session != null) {
+            await supabase.auth.signOut();
+            user = null;
+            session = null;
+          }
+        } on sb.AuthException catch (e) {
+          if (!e.message.toLowerCase().contains('already registered')) {
+            rethrow;
+          }
+          _emailSignUpInitiated = true;
+        }
+      }
+
+      if (session == null || user == null) {
+        try {
+          final verifyResponse = await supabase.auth.verifyOTP(
+            type: sb.OtpType.signup,
+            email: step1.email,
+            token: step2.verificationCode,
+          );
+          user ??= verifyResponse.user;
+          session ??= verifyResponse.session;
+        } on sb.AuthException catch (e) {
+          final message = e.message.isNotEmpty
+              ? e.message
+              : 'Invalid or expired verification code. Please request a new code.';
+          throw sb.AuthException(message);
+        }
+      }
 
       if (session == null || user == null) {
         final signInResponse = await supabase.auth.signInWithPassword(
           email: step1.email,
           password: step1.password,
         );
-        user = signInResponse.user ?? user;
-        session = signInResponse.session ?? session;
+        user ??= signInResponse.user;
+        session ??= signInResponse.session;
       }
 
-  if (user == null || session == null) {
-    throw sb.AuthException(
-    'Account created but email confirmation is required before login.');
-  }
+      if (user == null || session == null) {
+        throw sb.AuthException(
+          'Account created but email confirmation is required before login.',
+        );
+      }
+
+      try {
+        await supabase.auth.updateUser(
+          sb.UserAttributes(data: metadata),
+        );
+      } catch (e, st) {
+        if (kDebugMode) {
+          debugPrint('Auth update user metadata failed: $e');
+          debugPrintStack(stackTrace: st);
+        }
+      }
 
       try {
         final userService = ref.read(supabaseUserServiceProvider);
@@ -338,6 +454,7 @@ class AuthNotifier extends Notifier<AuthState> {
         draftNationalId:
             step2.idNumber ?? step1.nationalId ?? state.draftNationalId,
         draftGender: step2.gender ?? step1.gender ?? state.draftGender,
+        pendingEmailOtp: null,
       );
 
       _clearSignupDrafts();
@@ -361,7 +478,56 @@ class AuthNotifier extends Notifier<AuthState> {
         error: 'Failed to complete sign up. Please try again.',
       );
       return false;
+    } finally {
+      _emailSignUpInitiated = false;
     }
+  }
+
+  bool _isVerifiedFromAuthUser(sb.User? authUser) {
+    if (authUser == null) return false;
+    if (authUser.emailConfirmedAt != null) return true;
+
+    final meta = authUser.userMetadata ?? const <String, dynamic>{};
+    final statusCandidate = meta['status'] ??
+        meta['accountStatus'] ??
+        meta['account_status'] ??
+        meta['verificationStatus'] ??
+        meta['verification_status'];
+    if (statusCandidate is String) {
+      final normalized = statusCandidate.trim().toLowerCase();
+      if (normalized == 'verified' || normalized == 'approved') {
+        return true;
+      }
+    }
+
+    for (final key in const [
+      'isVerified',
+      'is_verified',
+      'verified',
+      'email_verified',
+      'contactVerified',
+      'contact_verified',
+    ]) {
+      if (_truthy(meta[key])) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  bool _truthy(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is String) {
+      final normalized = value.trim().toLowerCase();
+      return normalized == 'true' ||
+          normalized == 't' ||
+          normalized == 'yes' ||
+          normalized == '1' ||
+          normalized == 'verified';
+    }
+    return false;
   }
 
   // Add updateUser method
@@ -372,6 +538,7 @@ class AuthNotifier extends Notifier<AuthState> {
   void _clearSignupDrafts() {
     _step1Data = null;
     _step2Data = null;
+    state = state.copyWith(pendingEmailOtp: null);
   }
 
   Future<void> logout() async {
@@ -384,6 +551,7 @@ class AuthNotifier extends Notifier<AuthState> {
         user: null,
         draftNationalId: null,
         draftGender: null,
+        pendingEmailOtp: null,
         isPendingVerification: false,
       );
       _clearSignupDrafts();

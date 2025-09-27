@@ -109,11 +109,33 @@ class ReportFormNotifier extends Notifier<ReportFormData> {
 
   void reset() => state = ReportFormData();
 
+  Future<AppUser?> _resolveCurrentUser(WidgetRef ref) async {
+    try {
+      final user = await ref.read(accountUserProvider.future);
+      if (user != null) return user;
+    } catch (_) {
+      // fall through to auth fallback
+    }
+
+    final svc = ref.read(supabaseUserServiceProvider);
+    final authUser = svc.currentAuthUser;
+    if (authUser == null) return null;
+
+    try {
+      return await svc.me();
+    } catch (_) {
+      return svc.fallbackFromAuthUser(authUser);
+    }
+  }
+
   /// Convenience: submit the *current* form via the controller.
   Future<Result<Report>> submit(WidgetRef ref) async {
-    final user = await ref.read(accountUserProvider.future);
+    final user = await _resolveCurrentUser(ref);
     if (user == null) {
       return const Failure('You must be logged in to submit a report.');
+    }
+    if (!user.isVerified) {
+      return const Failure('Account verification is required before submitting a report.');
     }
     final ctrl = ref.read(reportControllerProvider);
     final res = await ctrl.submit(state, user);

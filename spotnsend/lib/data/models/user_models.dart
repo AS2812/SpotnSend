@@ -64,8 +64,24 @@ class AppUser {
   }
 
   factory AppUser.fromJson(Map<String, dynamic> json) {
-    final statusRaw = (json['status'] ?? json['accountStatus'] ?? json['account_status'] ?? 'pending').toString();
-    final phoneCountryCode = (json['phoneCountryCode'] ?? json['phone_country_code'])?.toString();
+    final statusRaw = (json['status'] ??
+            json['accountStatus'] ??
+            json['account_status'] ??
+            'pending')
+        .toString();
+    final normalizedStatus = statusRaw.trim().toLowerCase();
+    final boolStatus = _coerceBool(json['isVerified']) ||
+        _coerceBool(json['is_verified']) ||
+        _coerceBool(json['verified']) ||
+        _coerceBool(json['email_verified']) ||
+        _coerceBool(json['contactVerified']) ||
+        _coerceBool(json['contact_verified']);
+    final isVerified = boolStatus ||
+        normalizedStatus == 'verified' ||
+        normalizedStatus == 'approved';
+
+    final phoneCountryCode =
+        (json['phoneCountryCode'] ?? json['phone_country_code'])?.toString();
     final phoneNumber = (json['phone'] ?? json['phone_number'])?.toString();
     final phoneParts = [phoneCountryCode, phoneNumber]
         .where((value) => value != null && value.trim().isNotEmpty)
@@ -73,22 +89,28 @@ class AppUser {
         .toList();
 
     final savedSpotsJson = json['savedSpots'] ?? json['favoriteSpots'];
-    final roleRaw = (json['role'] ?? json['userRole'] ?? json['user_role'] ?? 'user').toString();
+    final roleRaw =
+        (json['role'] ?? json['userRole'] ?? json['user_role'] ?? 'user')
+            .toString();
+    final normalizedRole =
+        roleRaw.trim().isEmpty ? 'user' : roleRaw.trim().toLowerCase();
 
     return AppUser(
       id: (json['id'] ?? json['userId'] ?? json['user_id'] ?? '').toString(),
-      name: (json['name'] ?? json['fullName'] ?? json['full_name'] ?? '').toString(),
+      name: (json['name'] ?? json['fullName'] ?? json['full_name'] ?? '')
+          .toString(),
       username: (json['username'] ?? '').toString(),
       email: (json['email'] ?? '').toString(),
       phone: phoneParts.join(' '),
       idNumber: (json['idNumber'] ?? json['id_number'] ?? '').toString(),
       selfieUrl: (json['selfieUrl'] ?? json['selfie_url'] ?? '').toString(),
-      status: statusRaw.trim().toLowerCase() == 'verified'
-          ? VerificationStatus.verified
-          : VerificationStatus.pending,
-      role: roleRaw.trim().toLowerCase(),
-      reportsSubmitted: _coerceInt(json['reportsSubmitted'] ?? json['reports_count']) ?? 0,
-      feedbackGiven: _coerceInt(json['feedbackGiven'] ?? json['feedback_count']) ?? 0,
+      status:
+          isVerified ? VerificationStatus.verified : VerificationStatus.pending,
+      role: normalizedRole,
+      reportsSubmitted:
+          _coerceInt(json['reportsSubmitted'] ?? json['reports_count']) ?? 0,
+      feedbackGiven:
+          _coerceInt(json['feedbackGiven'] ?? json['feedback_count']) ?? 0,
       savedSpots: savedSpotsJson is List
           ? savedSpotsJson
               .whereType<Map<String, dynamic>>()
@@ -141,10 +163,15 @@ class SavedSpot {
   final DateTime? createdAt;
 
   factory SavedSpot.fromJson(Map<String, dynamic> json) {
-    final radius = json['radius'] ?? json['radiusMeters'] ?? json['radius_meters'];
+    final radius =
+        json['radius'] ?? json['radiusMeters'] ?? json['radius_meters'];
     final created = json['createdAt'] ?? json['created_at'];
     return SavedSpot(
-      id: (json['id'] ?? json['favoriteSpotId'] ?? json['favorite_spot_id'] ?? '').toString(),
+      id: (json['id'] ??
+              json['favoriteSpotId'] ??
+              json['favorite_spot_id'] ??
+              '')
+          .toString(),
       name: (json['name'] ?? '').toString(),
       lat: _coerceDouble(json['lat'] ?? json['latitude']) ?? 0,
       lng: _coerceDouble(json['lng'] ?? json['longitude']) ?? 0,
@@ -168,4 +195,12 @@ double? _coerceDouble(dynamic value) {
   if (value is double) return value;
   if (value is num) return value.toDouble();
   return double.tryParse(value.toString());
+}
+
+bool _coerceBool(dynamic value) {
+  if (value == null) return false;
+  if (value is bool) return value;
+  if (value is num) return value != 0;
+  return ['true', 't', 'yes', '1', 'verified']
+      .contains(value.toString().trim().toLowerCase());
 }

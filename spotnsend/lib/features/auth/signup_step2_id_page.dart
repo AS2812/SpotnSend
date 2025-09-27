@@ -38,14 +38,28 @@ class _SignupStep2IdPageState extends ConsumerState<SignupStep2IdPage> {
   }
 
   Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
     if (_frontPath == null || _backPath == null) {
       showErrorToast(context, 'Please upload both sides of your ID'.tr());
       return;
     }
 
     final authState = ref.read(authControllerProvider);
+    final verificationCode = authState.pendingEmailOtp?.trim();
+
+    if (verificationCode == null || verificationCode.isEmpty) {
+      showErrorToast(
+        context,
+        'Please enter the email verification code on the previous step.'.tr(),
+      );
+      return;
+    }
 
     final data = SignupStep2Data(
+      verificationCode: verificationCode,
       idNumber: authState.draftNationalId,
       gender: authState.draftGender,
       frontIdPath: _frontPath!,

@@ -52,6 +52,7 @@ const Map<String, String> englishLocalizations = {
   'Saved spots off': 'Saved spots off',
   'Saved spots on': 'Saved spots on',
   'Spot incident': 'Spot incident',
+  'Current location': 'Current location',
   'View list': 'View list',
   'Active reports nearby': 'Active reports nearby',
   'Alerts & updates': 'Alerts & updates',
@@ -61,6 +62,7 @@ const Map<String, String> englishLocalizations = {
       'Select whether to notify men or women.',
   'Men': 'Men',
   'Women': 'Women',
+  'Both': 'Both',
   'Male': 'Male',
   'Female': 'Female',
   'Will autofill after ID upload': 'Will autofill after ID upload',
@@ -70,6 +72,11 @@ const Map<String, String> englishLocalizations = {
   'Choose who should receive alerts when notifying people.':
       'Choose who should receive alerts when notifying people.',
   'Back to map': 'Back to map',
+  'Send verification code': 'Send verification code',
+  'Verification code sent. Check your email.':
+      'Verification code sent. Check your email.',
+  'Nearby activity is temporarily unavailable. Please try again shortly.':
+      'Nearby activity is temporarily unavailable. Please try again shortly.',
   'Failed to load list: {error}': 'Failed to load list: {error}',
   'Monitoring radius: {radius}': 'Monitoring radius: {radius}',
   'Nearby activity': 'Nearby activity',

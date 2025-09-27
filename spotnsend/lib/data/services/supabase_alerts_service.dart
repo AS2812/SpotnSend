@@ -44,10 +44,10 @@ class SupabaseAlertsService {
 
   Future<List<Alert>> _fallbackAlertsList() async {
     try {
-    final rows = await _alerts()
-      .select()
-      .eq('status', 'active')
-      .order('updated_at', ascending: false)
+      final rows = await _alerts()
+          .select()
+          .eq('status', 'active')
+          .order('updated_at', ascending: false)
           .limit(50) as List<dynamic>;
 
       return rows
@@ -71,11 +71,11 @@ class SupabaseAlertsService {
   }
 
   Future<List<Alert>> fetchAll({int limit = 50}) async {
-  final rows = await _alerts()
-    .select()
-    .eq('status', 'active')
-    .order('updated_at', ascending: false)
-    .limit(limit) as List<dynamic>;
+    final rows = await _alerts()
+        .select()
+        .eq('status', 'active')
+        .order('updated_at', ascending: false)
+        .limit(limit) as List<dynamic>;
 
     return rows.whereType<Map<String, dynamic>>().map(Alert.fromJson).toList();
   }

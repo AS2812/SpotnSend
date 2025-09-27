@@ -38,9 +38,26 @@ class _SignupStep1PageState extends ConsumerState<SignupStep1Page> {
     _emailController = TextEditingController();
     _phoneController = TextEditingController();
     _passwordController = TextEditingController();
-    _otpController = TextEditingController(text: '123456');
+    _otpController = TextEditingController();
     _nationalIdDisplayController = TextEditingController();
     _genderDisplayController = TextEditingController();
+  }
+
+  SignupStep1Data _buildStep1Payload(AuthState authState) {
+    return SignupStep1Data(
+      fullName: _fullNameController.text.trim(),
+      username: _generateUsername(
+        _fullNameController.text.trim(),
+        _emailController.text.trim(),
+      ),
+      email: _emailController.text.trim(),
+      phoneCountryCode: '+966',
+      phoneNumber: _phoneController.text.trim(),
+      password: _passwordController.text,
+      otp: _otpController.text.trim(),
+      nationalId: authState.draftNationalId,
+      gender: authState.draftGender,
+    );
   }
 
   @override
@@ -55,30 +72,73 @@ class _SignupStep1PageState extends ConsumerState<SignupStep1Page> {
     super.dispose();
   }
 
+  Future<void> _sendVerificationCode() async {
+    final fullName = _fullNameController.text.trim();
+    final email = _emailController.text.trim();
+    final phone = _phoneController.text.trim();
+    final password = _passwordController.text;
+
+    final fullNameError = validateNotEmpty(
+      context,
+      fullName,
+      fieldName: 'Full name'.tr(),
+    );
+    if (fullNameError != null) {
+      showErrorToast(context, fullNameError);
+      return;
+    }
+
+    final emailError = validateEmail(context, email);
+    if (emailError != null) {
+      showErrorToast(context, emailError);
+      return;
+    }
+
+    final phoneError = validatePhone(context, phone);
+    if (phoneError != null) {
+      showErrorToast(context, phoneError);
+      return;
+    }
+
+    final passwordError = validatePassword(context, password);
+    if (passwordError != null) {
+      showErrorToast(context, passwordError);
+      return;
+    }
+
+    final notifier = ref.read(authControllerProvider.notifier);
+    final authState = ref.read(authControllerProvider);
+
+    final ok = await notifier.signupStep1(_buildStep1Payload(authState));
+    if (!mounted) return;
+
+    final afterDraft = ref.read(authControllerProvider);
+    if (!ok || afterDraft.error != null) {
+      return;
+    }
+
+    final sent = await notifier.sendSignupVerificationCode();
+    final afterSend = ref.read(authControllerProvider);
+    if (!mounted) return;
+    if (sent && afterSend.error == null) {
+      showSuccessToast(
+        context,
+        'Verification code sent. Check your email.'.tr(),
+      );
+    } else if (afterSend.error != null) {
+      showErrorToast(context, afterSend.error!);
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    final authState = ref.read(authControllerProvider);
     final notifier = ref.read(authControllerProvider.notifier);
+    final authState = ref.read(authControllerProvider);
 
-    final data = SignupStep1Data(
-      fullName: _fullNameController.text.trim(),
-      username: _generateUsername(
-        _fullNameController.text.trim(),
-        _emailController.text.trim(),
-      ),
-      email: _emailController.text.trim(),
-      phoneCountryCode: '+966',
-      phoneNumber: _phoneController.text.trim(),
-      password: _passwordController.text,
-      otp: _otpController.text.trim(),
-      nationalId: authState.draftNationalId,
-      gender: authState.draftGender,
-    );
-
-    final ok = await notifier.signupStep1(data);
+    final ok = await notifier.signupStep1(_buildStep1Payload(authState));
 
     final state = ref.read(authControllerProvider);
     if (!mounted) return;
@@ -167,10 +227,25 @@ class _SignupStep1PageState extends ConsumerState<SignupStep1Page> {
             const SizedBox(height: 18),
             AppTextField(
               controller: _otpController,
-              label: 'SMS verification code'.tr(),
+              label: 'Email verification code'.tr(),
+              hint: 'Enter the 6-digit code sent to your email'.tr(),
               keyboardType: TextInputType.number,
               validator: (value) => validateOtp(context, value),
               textInputAction: TextInputAction.next,
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: authState.isLoading ? null : _sendVerificationCode,
+                child: Text('Send verification code'.tr()),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Enter the code once it arrives so we can unlock reporting for your account.'
+                  .tr(),
+              style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 18),
             AppTextField(

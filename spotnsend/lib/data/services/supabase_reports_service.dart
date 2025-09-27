@@ -325,8 +325,6 @@ class SupabaseReportService {
         return 'female';
       case ReportAudienceGender.both:
         return 'both';
-      case null:
-        return 'both';
     }
   }
 

@@ -14,7 +14,7 @@ import 'package:spotnsend/data/services/supabase_reports_service.dart';
 import 'package:spotnsend/features/home/account/providers/account_providers.dart';
 import 'package:spotnsend/main.dart';
 
-const double kDefaultSearchRadiusKm = 3;
+const double kDefaultSearchRadiusKm = 5;
 const double kMinSearchRadiusKm = 0.5;
 const double kMaxSearchRadiusKm = 30;
 const double kRadiusStepKm = 0.5;
@@ -170,6 +170,10 @@ class MapReportsController extends AsyncNotifier<List<Report>> {
     });
 
     return _reload();
+  }
+
+  Future<void> refresh() async {
+    await _reload();
   }
 
   Future<List<Report>> _reload() async {
@@ -525,7 +529,7 @@ final mapListContentProvider =
 
   final savedSummaries = savedSpots
       .map((spot) {
-        final radius = (spot.radiusMeters ?? 250).toDouble();
+        final radius = (spot.radiusMeters ?? 5000).toDouble();
         final matches = activeReports
             .where((report) =>
                 _distanceMeters(spot.lat, spot.lng, report.lat, report.lng) <=

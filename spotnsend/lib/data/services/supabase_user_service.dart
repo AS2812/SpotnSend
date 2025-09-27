@@ -17,7 +17,159 @@ class SupabaseUserService {
   AppUser? _cachedUser;
   bool _bootstrapEnsured = false;
 
+  bool _metaIndicatesVerified(Map<String, dynamic> meta) {
+    for (final key in const [
+      'status',
+      'accountStatus',
+      'account_status',
+      'verificationStatus',
+      'verification_status',
+    ]) {
+      final value = meta[key];
+      if (value is String) {
+        final normalized = value.trim().toLowerCase();
+        if (normalized == 'verified' ||
+            normalized == 'approved' ||
+            normalized == 'active') {
+          return true;
+        }
+      }
+    }
+
+    for (final key in const [
+      'isVerified',
+      'is_verified',
+      'verified',
+      'email_verified',
+      'contactVerified',
+      'contact_verified',
+    ]) {
+      if (_coerceMetaBool(meta[key])) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool _coerceMetaBool(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is String) {
+      final normalized = value.trim().toLowerCase();
+      return normalized == 'true' ||
+          normalized == 't' ||
+          normalized == 'yes' ||
+          normalized == '1' ||
+          normalized == 'verified' ||
+          normalized == 'approved' ||
+          normalized == 'active';
+    }
+    return false;
+  }
+
   AppUser? get cachedUser => _cachedUser;
+
+  sb.User? get currentAuthUser => _client.auth.currentUser;
+
+  AppUser fallbackFromAuthUser(sb.User authUser) {
+    final meta = authUser.userMetadata ?? const <String, dynamic>{};
+
+    String? metaString(String key) {
+      final value = meta[key];
+      if (value == null) return null;
+      final text = value.toString().trim();
+      return text.isEmpty ? null : text;
+    }
+
+    String fallbackUsername() {
+      final email = authUser.email;
+      if (email != null && email.contains('@')) {
+        return email.split('@').first;
+      }
+      return 'user_${authUser.id.substring(0, 8)}';
+    }
+
+    final name = (metaString('full_name') ?? metaString('name') ?? authUser.email ?? '').trim();
+    final username = (metaString('username') ?? fallbackUsername()).trim();
+    final rawPhoneParts = [metaString('phone_country_code'), metaString('phone'), metaString('phone_number')];
+    final phoneParts = rawPhoneParts
+        .whereType<String>()
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList();
+    final phone = phoneParts.isEmpty ? '' : phoneParts.join(' ');
+    final idNumber = (metaString('id_number') ?? metaString('national_id') ?? metaString('idNumber') ?? '').trim();
+    final selfieUrl = (metaString('selfie_url') ?? '').trim();
+    final roleRaw = (metaString('role') ?? metaString('userRole') ?? 'user').trim();
+
+    final verified = _metaIndicatesVerified(meta) || authUser.emailConfirmedAt != null;
+
+    return AppUser(
+      id: authUser.id,
+      name: name.isNotEmpty ? name : username,
+      username: username,
+      email: authUser.email ?? '',
+      phone: phone,
+      idNumber: idNumber,
+      selfieUrl: selfieUrl,
+      status: verified ? VerificationStatus.verified : VerificationStatus.pending,
+      role: roleRaw.isNotEmpty ? roleRaw.toLowerCase() : 'user',
+      reportsSubmitted: 0,
+      feedbackGiven: 0,
+      savedSpots: const [],
+    );
+  }
+
+  bool _metaIndicatesVerified(Map<String, dynamic> meta) {
+    for (final key in const [
+      'status',
+      'accountStatus',
+      'account_status',
+      'verificationStatus',
+      'verification_status',
+    ]) {
+      final value = meta[key];
+      if (value is String) {
+        final normalized = value.trim().toLowerCase();
+        if (normalized == 'verified' ||
+            normalized == 'approved' ||
+            normalized == 'active') {
+          return true;
+        }
+      }
+    }
+
+    for (final key in const [
+      'isVerified',
+      'is_verified',
+      'verified',
+      'email_verified',
+      'contactVerified',
+      'contact_verified',
+    ]) {
+      if (_coerceMetaBool(meta[key])) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool _coerceMetaBool(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is String) {
+      final normalized = value.trim().toLowerCase();
+      return normalized == 'true' ||
+          normalized == 't' ||
+          normalized == 'yes' ||
+          normalized == '1' ||
+          normalized == 'verified' ||
+          normalized == 'approved' ||
+          normalized == 'active';
+    }
+    return false;
+  }
+
 
   Future<AppUser> me() async {
     if (_cachedUser != null) return _cachedUser!;

@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:spotnsend/core/router/routes.dart';
 import 'package:spotnsend/data/models/alert_models.dart';
 import 'package:spotnsend/data/models/report_models.dart';
+import 'package:spotnsend/features/home/account/providers/account_providers.dart';
 import 'package:spotnsend/data/services/supabase_alerts_service.dart';
 import 'package:spotnsend/shared/widgets/app_button.dart';
 import 'package:spotnsend/shared/widgets/confirm_dialog.dart';
@@ -273,8 +274,8 @@ class _ReportPageState extends ConsumerState<ReportPage> {
 
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authControllerProvider);
-    if (authState.isPendingVerification) {
+    final isAccountVerified = ref.watch(isAccountVerifiedProvider);
+    if (!isAccountVerified) {
       return const _PendingVerificationLock();
     }
 

@@ -40,15 +40,15 @@ final accountUserProvider = FutureProvider<AppUser?>((ref) async {
 
   try {
     return await svc.fetchProfile(forceRefresh: true);
-  } catch (e) {
-    final u = supabase.auth.currentUser;
-    if (u == null) rethrow;
+  } catch (_) {
+    final authUser = supabase.auth.currentUser;
+    if (authUser == null) rethrow;
 
     try {
       await supabase.rpc('ensure_profile', params: {
         'p_full_name':
-            (u.userMetadata?['full_name'] as String?) ?? u.email ?? '',
-        'p_email': u.email ?? '',
+            (authUser.userMetadata?['full_name'] as String?) ?? authUser.email ?? '',
+        'p_email': authUser.email ?? '',
       });
     } catch (err, st) {
       if (kDebugMode) {
@@ -57,8 +57,31 @@ final accountUserProvider = FutureProvider<AppUser?>((ref) async {
       }
     }
 
-    return await svc.fetchProfile(forceRefresh: true);
+    try {
+      return await svc.fetchProfile(forceRefresh: true);
+    } catch (err, st) {
+      if (kDebugMode) {
+        debugPrint('accountUserProvider: using auth fallback due to: $err');
+        debugPrintStack(stackTrace: st);
+      }
+      return svc.fallbackFromAuthUser(authUser);
+    }
   }
+});
+
+/// Derived verification helpers so other features can react to account status.
+final accountVerificationStatusProvider = Provider<VerificationStatus>((ref) {
+  final userAsync = ref.watch(accountUserProvider);
+  return userAsync.when(
+    data: (user) => user?.status ?? VerificationStatus.pending,
+    loading: () => VerificationStatus.pending,
+    error: (_, __) => VerificationStatus.pending,
+  );
+});
+
+final isAccountVerifiedProvider = Provider<bool>((ref) {
+  final status = ref.watch(accountVerificationStatusProvider);
+  return status == VerificationStatus.verified;
 });
 
 /// Saved spots list (RLS + DEFAULT user_id = safe).

@@ -48,12 +48,14 @@ class SignupStep1Data {
 
 class SignupStep2Data {
   const SignupStep2Data({
+    required this.verificationCode,
     this.idNumber,
     this.gender,
     required this.frontIdPath,
     required this.backIdPath,
   });
 
+  final String verificationCode;
   final String? idNumber;
   final String? gender;
   final String frontIdPath;

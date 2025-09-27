@@ -374,7 +374,7 @@ class _SavedSpotsSection extends ConsumerWidget {
     if (selectedLocation == null) return;
 
     final nameController = TextEditingController();
-    double radiusKm = 1.0;
+    double radiusKm = 5.0;
 
     final result = await showDialog<bool>(
       context: context,

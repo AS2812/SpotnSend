@@ -194,7 +194,7 @@ class ReportFormData {
   final double? selectedLat;
   final double? selectedLng;
   final bool agreedToTerms;
-  final ReportAudienceGender? peopleGender;
+  final ReportAudienceGender peopleGender;
   final ReportAudience? notifyScope;
   final ReportPriority? priority;
 
@@ -244,7 +244,7 @@ class ReportFormData {
       agreedToTerms: agreedToTerms ?? this.agreedToTerms,
       peopleGender: identical(peopleGender, _unset)
           ? this.peopleGender
-          : peopleGender as ReportAudienceGender?,
+          : peopleGender as ReportAudienceGender,
       notifyScope: identical(notifyScope, _unset)
           ? this.notifyScope
           : notifyScope as ReportAudience?,

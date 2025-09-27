@@ -179,7 +179,7 @@ class _SavedSpotCard extends StatelessWidget {
     final theme = Theme.of(context);
     final spot = summary.spot;
     final reports = summary.reports;
-    final radiusMeters = (spot.radiusMeters ?? 250).toDouble();
+    final radiusMeters = (spot.radiusMeters ?? 5000).toDouble();
     final radiusLabel = radiusMeters >= 1000
         ? '${(radiusMeters / 1000).toStringAsFixed(1)} km'
         : '${radiusMeters.toStringAsFixed(0)} m';
