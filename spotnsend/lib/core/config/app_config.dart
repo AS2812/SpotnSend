@@ -10,4 +10,12 @@ class AppConfig {
     }
     return 'baucnweLIulZSBRwopDh';
   }
+
+  static String? get geminiApiKey {
+    final value = dotenv.maybeGet('GEMINI_API_KEY');
+    if (value == null) return null;
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return null;
+    return trimmed;
+  }
 }

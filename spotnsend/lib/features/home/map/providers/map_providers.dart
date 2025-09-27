@@ -8,10 +8,13 @@ import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:spotnsend/data/models/report_models.dart';
 import 'package:spotnsend/data/models/alert_models.dart';
 import 'package:spotnsend/data/models/user_models.dart';
+import 'package:spotnsend/data/models/settings_models.dart';
 import 'package:spotnsend/data/services/supabase_alerts_service.dart';
 import 'package:spotnsend/data/services/maptiler_service.dart';
 import 'package:spotnsend/data/services/supabase_reports_service.dart';
+import 'package:spotnsend/data/services/translation_service.dart';
 import 'package:spotnsend/features/home/account/providers/account_providers.dart';
+import 'package:spotnsend/features/home/settings/providers/settings_providers.dart';
 import 'package:spotnsend/main.dart';
 
 const double kDefaultSearchRadiusKm = 5;
@@ -136,6 +139,8 @@ class MapReportsController extends AsyncNotifier<List<Report>> {
   sb.RealtimeChannel? _channel;
   int? _viewerUserId;
   bool _viewerIsGovernment = false;
+  TranslationService? _translator;
+  AppLanguage _language = AppLanguage.english;
 
   // Current query params to keep realtime consistent with the UI.
   _QueryParams? _params;
@@ -143,6 +148,11 @@ class MapReportsController extends AsyncNotifier<List<Report>> {
 
   @override
   Future<List<Report>> build() async {
+    _language = ref.watch(
+      settingsControllerProvider.select((state) => state.settings.language),
+    );
+    _translator = ref.watch(translationServiceProvider);
+
     // Re-fetch when filters change
     ref.listen<ReportFilters>(mapFiltersProvider, (_, __) async {
       await _reload();
@@ -217,7 +227,8 @@ class MapReportsController extends AsyncNotifier<List<Report>> {
       viewerIsGovernment: _viewerIsGovernment,
     );
 
-    final visible = _sortedReports(data.where(_canSee));
+    final localized = await _localizeReports(data);
+    final visible = _sortedReports(localized.where(_canSee));
 
     _startRealtime();
 
@@ -256,8 +267,9 @@ class MapReportsController extends AsyncNotifier<List<Report>> {
     final ch = supabase.channel('realtime:reports');
 
     // INSERT / UPDATE: merge if it matches current filters
-    void _upsert(Map<String, dynamic> row) {
-      final r = Report.fromJson(row);
+    Future<void> _upsert(Map<String, dynamic> row) async {
+      var r = Report.fromJson(row);
+      r = await _localizeReport(r);
       if (!_canSee(r)) return;
       final p = _params;
       if (p == null) return;
@@ -284,13 +296,13 @@ class MapReportsController extends AsyncNotifier<List<Report>> {
         event: sb.PostgresChangeEvent.insert,
         schema: 'public',
         table: 'reports',
-        callback: (payload) => _upsert(payload.newRecord),
+        callback: (payload) => unawaited(_upsert(payload.newRecord)),
       )
       ..onPostgresChanges(
         event: sb.PostgresChangeEvent.update,
         schema: 'public',
         table: 'reports',
-        callback: (payload) => _upsert(payload.newRecord),
+        callback: (payload) => unawaited(_upsert(payload.newRecord)),
       )
       ..onPostgresChanges(
         event: sb.PostgresChangeEvent.delete,
@@ -305,15 +317,44 @@ class MapReportsController extends AsyncNotifier<List<Report>> {
 
   /// Optional optimistic add from the submit flow
   void addOrReplace(Report r) {
-    if (!_canSee(r)) return;
-    final p = _params;
-    if (p != null) {
-      if (!_categoryAllowed(r, p.categoryIds)) return;
-      if (_distanceMeters(p.lat, p.lng, r.lat, r.lng) > p.radiusM + 1) return;
+    unawaited(() async {
+      var localized = r;
+      localized = await _localizeReport(localized);
+      if (!_canSee(localized)) return;
+      final p = _params;
+      if (p != null) {
+        if (!_categoryAllowed(localized, p.categoryIds)) return;
+        if (_distanceMeters(p.lat, p.lng, localized.lat, localized.lng) >
+            p.radiusM + 1) {
+          return;
+        }
+      }
+      final cur = state.value ?? const <Report>[];
+      final next = <Report>[localized, ...cur.where((e) => e.id != localized.id)];
+      _publish(next);
+    }());
+  }
+
+  Future<List<Report>> _localizeReports(Iterable<Report> reports) async {
+    final translator = _translator;
+    if (_language != AppLanguage.arabic || translator == null) {
+      return reports.toList(growable: false);
     }
-    final cur = state.value ?? const <Report>[];
-    final next = <Report>[r, ...cur.where((e) => e.id != r.id)];
-    _publish(next);
+    if (!translator.isEnabled) {
+      return reports.toList(growable: false);
+    }
+    return translator.translateReports(reports);
+  }
+
+  Future<Report> _localizeReport(Report report) async {
+    final translator = _translator;
+    if (_language != AppLanguage.arabic || translator == null) {
+      return report;
+    }
+    if (!translator.isEnabled) {
+      return report;
+    }
+    return translator.translateReport(report);
   }
 }
 
@@ -326,6 +367,10 @@ final nearbyReportsProvider =
   final filters = ref.watch(mapFiltersProvider);
   final loc = await ref.watch(currentLocationProvider.future);
   final user = await ref.watch(accountUserProvider.future);
+  final language = ref.watch(
+    settingsControllerProvider.select((state) => state.settings.language),
+  );
+  final translator = ref.watch(translationServiceProvider);
 
   const fallbackLat = 24.7136;
   const fallbackLng = 46.6753;
@@ -333,13 +378,17 @@ final nearbyReportsProvider =
   final lat = (loc?.latitude ?? fallbackLat).toDouble();
   final lng = (loc?.longitude ?? fallbackLng).toDouble();
 
-  return svc.fetchNearby(
+  final reports = await svc.fetchNearby(
     lat: lat,
     lng: lng,
     radiusKm: filters.radiusKm,
     categoryIds: filters.categoryIds,
     viewerIsGovernment: user?.isGovernment ?? false,
   );
+  if (language != AppLanguage.arabic || !translator.isEnabled) {
+    return reports;
+  }
+  return translator.translateReports(reports);
 });
 
 final mapAlertsControllerProvider =

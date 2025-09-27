@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:spotnsend/data/models/auth_models.dart';
-import 'package:spotnsend/data/models/user_models.dart';
 import 'package:spotnsend/data/services/supabase_user_service.dart';
 import 'package:spotnsend/features/home/account/providers/account_providers.dart';
 import 'package:spotnsend/main.dart';

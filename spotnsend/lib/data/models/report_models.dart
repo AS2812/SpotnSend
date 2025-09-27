@@ -18,6 +18,19 @@ class ReportCategory {
   final String name;
   final String slug;
   final List<ReportSubcategory> subcategories;
+
+  ReportCategory copyWith({
+    String? name,
+    String? slug,
+    List<ReportSubcategory>? subcategories,
+  }) {
+    return ReportCategory(
+      id: id,
+      name: name ?? this.name,
+      slug: slug ?? this.slug,
+      subcategories: subcategories ?? this.subcategories,
+    );
+  }
 }
 
 class ReportSubcategory {
@@ -25,6 +38,15 @@ class ReportSubcategory {
 
   final int id;
   final String name;
+
+  ReportSubcategory copyWith({
+    String? name,
+  }) {
+    return ReportSubcategory(
+      id: id,
+      name: name ?? this.name,
+    );
+  }
 }
 
 class Report {
@@ -136,6 +158,46 @@ class Report {
   List<String> get mediaUrls => (media == null || media!.isEmpty)
       ? const []
       : media!.map((item) => item.url).toList(growable: false);
+
+  Report copyWith({
+    String? id,
+    int? categoryId,
+    String? categoryName,
+    String? categorySlug,
+    int? subcategoryId,
+    String? subcategoryName,
+    String? description,
+    double? lat,
+    double? lng,
+    ReportStatus? status,
+    ReportPriority? priority,
+    DateTime? createdAt,
+    ReportAudience? notifyScope,
+    int? ownerUserId,
+    double? distanceMeters,
+    List<ReportMedia>? media,
+    ReportAudienceGender? notifyPeopleGender,
+  }) {
+    return Report(
+      id: id ?? this.id,
+      categoryId: categoryId ?? this.categoryId,
+      categoryName: categoryName ?? this.categoryName,
+      categorySlug: categorySlug ?? this.categorySlug,
+      subcategoryId: subcategoryId ?? this.subcategoryId,
+      subcategoryName: subcategoryName ?? this.subcategoryName,
+      description: description ?? this.description,
+      lat: lat ?? this.lat,
+      lng: lng ?? this.lng,
+      status: status ?? this.status,
+      priority: priority ?? this.priority,
+      createdAt: createdAt ?? this.createdAt,
+      notifyScope: notifyScope ?? this.notifyScope,
+      ownerUserId: ownerUserId ?? this.ownerUserId,
+      distanceMeters: distanceMeters ?? this.distanceMeters,
+      media: media ?? this.media,
+      notifyPeopleGender: notifyPeopleGender ?? this.notifyPeopleGender,
+    );
+  }
 }
 
 class ReportMedia {
@@ -177,7 +239,7 @@ class ReportFormData {
     this.selectedLat,
     this.selectedLng,
     this.agreedToTerms = false,
-    this.peopleGender = ReportAudienceGender.both,
+  this.peopleGender = ReportAudienceGender.both,
     this.notifyScope,
     this.priority,
   });
@@ -194,7 +256,7 @@ class ReportFormData {
   final double? selectedLat;
   final double? selectedLng;
   final bool agreedToTerms;
-  final ReportAudienceGender peopleGender;
+  final ReportAudienceGender? peopleGender;
   final ReportAudience? notifyScope;
   final ReportPriority? priority;
 
@@ -242,9 +304,9 @@ class ReportFormData {
           ? this.selectedLng
           : selectedLng as double?,
       agreedToTerms: agreedToTerms ?? this.agreedToTerms,
-      peopleGender: identical(peopleGender, _unset)
-          ? this.peopleGender
-          : peopleGender as ReportAudienceGender,
+    peopleGender: identical(peopleGender, _unset)
+      ? this.peopleGender
+      : peopleGender as ReportAudienceGender?,
       notifyScope: identical(notifyScope, _unset)
           ? this.notifyScope
           : notifyScope as ReportAudience?,

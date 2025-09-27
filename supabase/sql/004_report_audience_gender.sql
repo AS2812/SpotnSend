@@ -66,6 +66,8 @@ DECLARE
   v_priority text;
   v_gender text;
   v_report public.reports;
+  v_errcode text;
+  v_errmsg text;
 BEGIN
   v_user_id := current_user_id();
   IF v_user_id IS NULL THEN
@@ -83,33 +85,70 @@ BEGIN
     v_gender := 'both';
   END IF;
 
-  INSERT INTO public.reports (
-    user_id,
-    category_id,
-    subcategory_id,
-    description,
-    latitude,
-    longitude,
-    location_geog,
-    notify_scope,
-    priority,
-    alert_radius_meters,
-    notify_people_gender
-  )
-  VALUES (
-    v_user_id,
-    p_category_id,
-    p_subcategory_id,
-    NULLIF(p_description, ''),
-    p_lat,
-    p_lng,
-    ST_SetSRID(ST_MakePoint(p_lng, p_lat), 4326)::geography,
-    v_notify::notify_scope,
-    v_priority::report_priority,
-    v_radius,
-    v_gender
-  )
-  RETURNING * INTO v_report;
+  BEGIN
+    INSERT INTO public.reports (
+      user_id,
+      category_id,
+      subcategory_id,
+      description,
+      latitude,
+      longitude,
+      location_geog,
+      notify_scope,
+      priority,
+      alert_radius_meters,
+      notify_people_gender
+    )
+    VALUES (
+      v_user_id,
+      p_category_id,
+      p_subcategory_id,
+      NULLIF(p_description, ''),
+      p_lat,
+      p_lng,
+      ST_SetSRID(ST_MakePoint(p_lng, p_lat), 4326)::geography,
+      v_notify::notify_scope,
+      v_priority::report_priority,
+      v_radius,
+      v_gender
+    )
+    RETURNING * INTO v_report;
+  EXCEPTION
+    WHEN others THEN
+      GET STACKED DIAGNOSTICS v_errcode = RETURNED_SQLSTATE,
+                              v_errmsg = MESSAGE_TEXT;
+
+      IF v_errcode IN ('428C9', '0A000')
+         OR v_errmsg LIKE 'cannot insert a non-DEFAULT value into column%location_geog%' THEN
+        INSERT INTO public.reports (
+          user_id,
+          category_id,
+          subcategory_id,
+          description,
+          latitude,
+          longitude,
+          notify_scope,
+          priority,
+          alert_radius_meters,
+          notify_people_gender
+        )
+        VALUES (
+          v_user_id,
+          p_category_id,
+          p_subcategory_id,
+          NULLIF(p_description, ''),
+          p_lat,
+          p_lng,
+          v_notify::notify_scope,
+          v_priority::report_priority,
+          v_radius,
+          v_gender
+        )
+        RETURNING * INTO v_report;
+      ELSE
+        RAISE;
+      END IF;
+  END;
 
   RETURN v_report;
 END;

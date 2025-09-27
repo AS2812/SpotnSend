@@ -76,9 +76,12 @@ class AppUser {
         _coerceBool(json['email_verified']) ||
         _coerceBool(json['contactVerified']) ||
         _coerceBool(json['contact_verified']);
-    final isVerified = boolStatus ||
-        normalizedStatus == 'verified' ||
-        normalizedStatus == 'approved';
+  final isVerified = boolStatus ||
+    normalizedStatus == 'verified' ||
+    normalizedStatus == 'approved' ||
+    normalizedStatus == 'active' ||
+    normalizedStatus == 'confirmed' ||
+    normalizedStatus == 'completed';
 
     final phoneCountryCode =
         (json['phoneCountryCode'] ?? json['phone_country_code'])?.toString();
@@ -201,6 +204,6 @@ bool _coerceBool(dynamic value) {
   if (value == null) return false;
   if (value is bool) return value;
   if (value is num) return value != 0;
-  return ['true', 't', 'yes', '1', 'verified']
+  return ['true', 't', 'yes', '1', 'verified', 'approved', 'active', 'confirmed']
       .contains(value.toString().trim().toLowerCase());
 }

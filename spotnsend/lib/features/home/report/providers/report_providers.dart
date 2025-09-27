@@ -3,16 +3,30 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:spotnsend/core/utils/result.dart';
 import 'package:spotnsend/data/models/report_models.dart';
 import 'package:spotnsend/data/models/user_models.dart';
+import 'package:spotnsend/data/models/settings_models.dart';
 import 'package:spotnsend/data/services/supabase_reports_service.dart';
 import 'package:spotnsend/data/services/supabase_user_service.dart';
+import 'package:spotnsend/data/services/translation_service.dart';
 import 'package:spotnsend/features/home/account/providers/account_providers.dart';
+import 'package:spotnsend/features/home/settings/providers/settings_providers.dart';
 
 /// =============== Data sources ===============
 
 final reportCategoriesProvider =
     FutureProvider<List<ReportCategory>>((ref) async {
   final svc = ref.watch(supabaseReportServiceProvider);
-  return svc.loadCategories();
+  final language = ref.watch(
+    settingsControllerProvider.select((state) => state.settings.language),
+  );
+  final categories = await svc.loadCategories();
+  if (language != AppLanguage.arabic) {
+    return categories;
+  }
+  final translator = ref.watch(translationServiceProvider);
+  if (!translator.isEnabled) {
+    return categories;
+  }
+  return translator.translateCategories(categories);
 });
 
 /// Currently selected category (derived from form state + categories)
@@ -104,7 +118,9 @@ class ReportFormNotifier extends Notifier<ReportFormData> {
   }
 
   void setPeopleGender(ReportAudienceGender? value) {
-    state = state.copyWith(peopleGender: value);
+    state = state.copyWith(
+      peopleGender: value ?? ReportAudienceGender.both,
+    );
   }
 
   void reset() => state = ReportFormData();

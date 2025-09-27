@@ -318,7 +318,7 @@ class SupabaseReportService {
     if (audience != ReportAudience.people) {
       return 'both';
     }
-    switch (form.peopleGender) {
+    switch (form.peopleGender ?? ReportAudienceGender.both) {
       case ReportAudienceGender.male:
         return 'male';
       case ReportAudienceGender.female:

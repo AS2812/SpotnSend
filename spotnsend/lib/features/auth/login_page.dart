@@ -96,14 +96,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     return AuthScaffold(
       title: 'Welcome back to SpotnSend'.tr(),
       subtitle: 'Log in to monitor live reports and stay informed.'.tr(),
-      showBackButton: true,
-      onBack: () {
-        if (Navigator.of(context).canPop()) {
-          Navigator.of(context).pop();
-          return;
-        }
-        context.go(RoutePaths.signupStep1);
-      },
+      showBackButton: false,
       body: Form(
         key: _formKey,
         child: Column(

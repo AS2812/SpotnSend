@@ -9,64 +9,91 @@ import 'package:spotnsend/data/models/user_models.dart';
 import 'package:spotnsend/data/services/supabase_user_service.dart';
 
 /// Waits until Supabase has a session (or times out).
-final signedInSessionProvider = FutureProvider<sb.Session?>((ref) async {
-  final cur = supabase.auth.currentSession;
-  if (cur != null) return cur;
+final signedInSessionProvider = StreamProvider<sb.Session?>((ref) async* {
+  yield supabase.auth.currentSession;
 
-  final completer = Completer<sb.Session?>();
-  late final StreamSubscription sub;
-  sub = supabase.auth.onAuthStateChange.listen((data) {
-    final ev = data.event;
-    if (ev == sb.AuthChangeEvent.signedIn ||
-        ev == sb.AuthChangeEvent.tokenRefreshed) {
-      completer.complete(supabase.auth.currentSession);
+  await for (final authState in supabase.auth.onAuthStateChange) {
+    switch (authState.event) {
+      case sb.AuthChangeEvent.signedOut:
+        yield null;
+        break;
+      default:
+        yield authState.session ?? supabase.auth.currentSession;
     }
-  });
-
-  try {
-    return await completer.future
-        .timeout(const Duration(seconds: 6), onTimeout: () => null);
-  } finally {
-    await sub.cancel();
   }
 });
 
 /// Loads the profile. If missing, auto-creates then re-fetches.
 final accountUserProvider = FutureProvider<AppUser?>((ref) async {
-  final session = await ref.watch(signedInSessionProvider.future);
-  if (session == null) return null;
-
+  final sessionAsync = ref.watch(signedInSessionProvider);
   final svc = ref.read(supabaseUserServiceProvider);
 
-  try {
-    return await svc.fetchProfile(forceRefresh: true);
-  } catch (_) {
-    final authUser = supabase.auth.currentUser;
-    if (authUser == null) rethrow;
+  Future<AppUser?> loadForSession(sb.Session? session) async {
+    final authUser = supabase.auth.currentUser ?? session?.user;
 
-    try {
-      await supabase.rpc('ensure_profile', params: {
-        'p_full_name':
-            (authUser.userMetadata?['full_name'] as String?) ?? authUser.email ?? '',
-        'p_email': authUser.email ?? '',
-      });
-    } catch (err, st) {
-      if (kDebugMode) {
-        debugPrint('ensure_profile failed: $err');
-        debugPrintStack(stackTrace: st);
-      }
+    if (session == null && authUser == null) {
+      svc.clearCache();
+      return null;
     }
 
     try {
       return await svc.fetchProfile(forceRefresh: true);
-    } catch (err, st) {
-      if (kDebugMode) {
-        debugPrint('accountUserProvider: using auth fallback due to: $err');
-        debugPrintStack(stackTrace: st);
+    } catch (_) {
+      final fallbackUser = authUser ?? supabase.auth.currentUser;
+      if (fallbackUser == null) {
+        rethrow;
       }
-      return svc.fallbackFromAuthUser(authUser);
+
+      try {
+        await supabase.rpc('ensure_profile', params: {
+          'p_full_name': (fallbackUser.userMetadata?['full_name'] as String?) ??
+              fallbackUser.email ??
+              '',
+          'p_email': fallbackUser.email ?? '',
+        });
+      } catch (err, st) {
+        if (kDebugMode) {
+          debugPrint('ensure_profile failed: $err');
+          debugPrintStack(stackTrace: st);
+        }
+      }
+
+      try {
+        return await svc.fetchProfile(forceRefresh: true);
+      } catch (err, st) {
+        if (kDebugMode) {
+          debugPrint('accountUserProvider fallback: $err');
+          debugPrintStack(stackTrace: st);
+        }
+      }
+
+      return svc.fallbackFromAuthUser(fallbackUser);
     }
   }
+
+  return await sessionAsync.when(
+    data: (session) => loadForSession(session),
+    loading: () async {
+      final current = supabase.auth.currentSession;
+      if (current != null) {
+        return loadForSession(current);
+      }
+      final nextSession = await ref.watch(signedInSessionProvider.future);
+      return loadForSession(nextSession);
+    },
+    error: (error, stack) async {
+      if (kDebugMode) {
+        debugPrint('signedInSessionProvider error: $error');
+        debugPrintStack(stackTrace: stack);
+      }
+      final authUser = supabase.auth.currentUser;
+      if (authUser == null) {
+        svc.clearCache();
+        return null;
+      }
+      return svc.fallbackFromAuthUser(authUser);
+    },
+  );
 });
 
 /// Derived verification helpers so other features can react to account status.
@@ -86,10 +113,20 @@ final isAccountVerifiedProvider = Provider<bool>((ref) {
 
 /// Saved spots list (RLS + DEFAULT user_id = safe).
 final accountSavedSpotsProvider = FutureProvider<List<SavedSpot>>((ref) async {
-  final session = await ref.watch(signedInSessionProvider.future);
-  if (session == null) return const [];
+  final sessionAsync = ref.watch(signedInSessionProvider);
   final svc = ref.read(supabaseUserServiceProvider);
-  return svc.listSavedSpots();
+
+  return await sessionAsync.when(
+    data: (session) {
+      if (session == null) {
+        svc.clearCache();
+        return Future.value(const <SavedSpot>[]);
+      }
+      return svc.listSavedSpots();
+    },
+    loading: () async => const <SavedSpot>[],
+    error: (_, __) async => const <SavedSpot>[],
+  );
 });
 
 /// Controller used by the Account screen.

@@ -14,7 +14,6 @@ import 'package:spotnsend/shared/widgets/app_button.dart';
 import 'package:spotnsend/shared/widgets/confirm_dialog.dart';
 import 'package:spotnsend/shared/widgets/location_picker.dart';
 import 'package:spotnsend/shared/widgets/toasts.dart';
-import 'package:spotnsend/features/auth/providers/auth_providers.dart';
 import 'package:spotnsend/features/home/map/providers/map_providers.dart';
 import 'package:spotnsend/features/home/report/providers/report_providers.dart';
 import 'package:spotnsend/l10n/app_localizations.dart';
