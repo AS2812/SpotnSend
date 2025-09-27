@@ -4,12 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/router/routes.dart';
-import '../../core/utils/validators.dart';
 import '../../shared/widgets/app_button.dart';
-import '../../shared/widgets/app_text_field.dart';
 import '../../shared/widgets/toasts.dart';
 import 'providers/auth_providers.dart';
 import 'widgets/auth_scaffold.dart';
+import 'package:spotnsend/data/models/auth_models.dart';
 import 'package:spotnsend/l10n/app_localizations.dart';
 
 class SignupStep2IdPage extends ConsumerStatefulWidget {
@@ -21,23 +20,8 @@ class SignupStep2IdPage extends ConsumerStatefulWidget {
 
 class _SignupStep2IdPageState extends ConsumerState<SignupStep2IdPage> {
   final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _idNumberController;
   String? _frontPath;
   String? _backPath;
-  String? _selectedGender;
-  bool _initializedFromDraft = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _idNumberController = TextEditingController();
-  }
-
-  @override
-  void dispose() {
-    _idNumberController.dispose();
-    super.dispose();
-  }
 
   Future<void> _pickFile(bool isFront) async {
     final result = await FilePicker.platform
@@ -54,47 +38,31 @@ class _SignupStep2IdPageState extends ConsumerState<SignupStep2IdPage> {
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-
     if (_frontPath == null || _backPath == null) {
       showErrorToast(context, 'Please upload both sides of your ID'.tr());
       return;
     }
-    if (_selectedGender == null) {
-      showErrorToast(context, 'Please select a gender.'.tr());
-      return;
-    }
 
-    await ref.read(authControllerProvider.notifier).signupStep2({
-      'idNumber': _idNumberController.text.trim(),
-      'frontIdPath': _frontPath!,
-      'backIdPath': _backPath!,
-      'gender': _selectedGender,
-    });
+    final authState = ref.read(authControllerProvider);
+
+    final data = SignupStep2Data(
+      idNumber: authState.draftNationalId,
+      gender: authState.draftGender,
+      frontIdPath: _frontPath!,
+      backIdPath: _backPath!,
+    );
+
+    await ref.read(authControllerProvider.notifier).signupStep2(data);
 
     final state = ref.read(authControllerProvider);
     if (mounted && state.error == null) {
-      context.go(RoutePaths.signupStep3);
+      context.push(RoutePaths.signupStep3);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authControllerProvider);
-
-    if (!_initializedFromDraft) {
-      final draftId = authState.draftNationalId;
-      final draftGender = authState.draftGender;
-      if (draftId != null && draftId.isNotEmpty) {
-        _idNumberController.text = draftId;
-      }
-      if (draftGender == 'male' || draftGender == 'female') {
-        _selectedGender = draftGender;
-      }
-      _initializedFromDraft = true;
-    }
 
     ref.listen<AuthState>(authControllerProvider, (previous, next) {
       if (previous?.error != next.error && next.error != null) {
@@ -107,52 +75,12 @@ class _SignupStep2IdPageState extends ConsumerState<SignupStep2IdPage> {
       subtitle:
           'Upload your national ID so we can keep reporting trusted.'.tr(),
       showBackButton: true,
+      onBack: () => context.pop(),
       body: Form(
         key: _formKey,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            AppTextField(
-              controller: _idNumberController,
-              label: 'National ID number'.tr(),
-              keyboardType: TextInputType.number,
-              validator: (value) => validateNotEmpty(context, value,
-                  fieldName: 'National ID number'.tr()),
-            ),
-            const SizedBox(height: 18),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Gender'.tr(),
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 12,
-                  children: [
-                    ChoiceChip(
-                      label: Text('Male'.tr()),
-                      selected: _selectedGender == 'male',
-                      onSelected: (selected) => setState(
-                          () => _selectedGender = selected ? 'male' : null),
-                    ),
-                    ChoiceChip(
-                      label: Text('Female'.tr()),
-                      selected: _selectedGender == 'female',
-                      onSelected: (selected) => setState(
-                          () => _selectedGender = selected ? 'female' : null),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Select the gender shown on the ID.'.tr(),
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-            const SizedBox(height: 22),
             _UploadTile(
               title: 'Front of ID'.tr(),
               subtitle:
@@ -176,7 +104,7 @@ class _SignupStep2IdPageState extends ConsumerState<SignupStep2IdPage> {
             AppButton(
               label: 'Back to info'.tr(),
               variant: ButtonVariant.secondary,
-              onPressed: () => context.go(RoutePaths.signupStep1),
+              onPressed: () => context.pop(),
             ),
           ],
         ),

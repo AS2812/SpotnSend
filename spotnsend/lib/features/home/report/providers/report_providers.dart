@@ -73,7 +73,14 @@ class ReportFormNotifier extends Notifier<ReportFormData> {
   }
 
   void setAudience(ReportAudience value) {
-    state = state.copyWith(audience: value);
+    final adjustedGender =
+        value == ReportAudience.people ? state.peopleGender : null;
+    state = state.copyWith(
+      audience: value,
+      peopleGender: value == ReportAudience.people
+          ? (adjustedGender ?? ReportAudienceGender.both)
+          : null,
+    );
   }
 
   void setUseCurrentLocation(bool value) {

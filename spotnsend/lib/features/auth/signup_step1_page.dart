@@ -10,6 +10,7 @@ import '../../shared/widgets/app_text_field.dart';
 import '../../shared/widgets/toasts.dart';
 import 'providers/auth_providers.dart';
 import 'widgets/auth_scaffold.dart';
+import 'package:spotnsend/data/models/auth_models.dart';
 import 'package:spotnsend/l10n/app_localizations.dart';
 
 class SignupStep1Page extends ConsumerStatefulWidget {
@@ -59,19 +60,45 @@ class _SignupStep1PageState extends ConsumerState<SignupStep1Page> {
       return;
     }
 
-    await ref.read(authControllerProvider.notifier).signupStep1({
-      'fullName': _fullNameController.text.trim(),
-      'email': _emailController.text.trim(),
-      'phoneCountryCode': '+966',
-      'phoneNumber': _phoneController.text.trim(),
-      'password': _passwordController.text,
-      'otp': _otpController.text.trim(),
-    });
+    final authState = ref.read(authControllerProvider);
+    final notifier = ref.read(authControllerProvider.notifier);
+
+    final data = SignupStep1Data(
+      fullName: _fullNameController.text.trim(),
+      username: _generateUsername(
+        _fullNameController.text.trim(),
+        _emailController.text.trim(),
+      ),
+      email: _emailController.text.trim(),
+      phoneCountryCode: '+966',
+      phoneNumber: _phoneController.text.trim(),
+      password: _passwordController.text,
+      otp: _otpController.text.trim(),
+      nationalId: authState.draftNationalId,
+      gender: authState.draftGender,
+    );
+
+    final ok = await notifier.signupStep1(data);
 
     final state = ref.read(authControllerProvider);
-    if (mounted && state.error == null) {
-      context.go(RoutePaths.signupStep2);
+    if (!mounted) return;
+    if (!ok || state.error != null) {
+      return;
     }
+
+    context.push(RoutePaths.signupStep2);
+  }
+
+  String _generateUsername(String fullName, String email) {
+    final emailPrefix = email.contains('@') ? email.split('@').first : email;
+    final normalized = fullName
+        .toLowerCase()
+        .replaceAll(RegExp(r"[^a-z0-9]+"), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .trim();
+    final base = normalized.isNotEmpty ? normalized : emailPrefix;
+    final suffix = DateTime.now().millisecondsSinceEpoch % 1000;
+    return '${base}_$suffix';
   }
 
   @override
@@ -100,6 +127,7 @@ class _SignupStep1PageState extends ConsumerState<SignupStep1Page> {
       title: 'Create your SpotnSend account'.tr(),
       subtitle: 'We need a few details to set up your secure profile.'.tr(),
       showBackButton: true,
+      onBack: () => context.go(RoutePaths.login),
       body: Form(
         key: _formKey,
         child: Column(

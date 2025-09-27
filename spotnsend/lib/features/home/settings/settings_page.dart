@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:spotnsend/data/models/settings_models.dart';
 import 'package:spotnsend/features/auth/providers/auth_providers.dart';
@@ -25,6 +26,7 @@ class SettingsPage extends ConsumerWidget {
 
     final controller = ref.read(settingsControllerProvider.notifier);
     final settings = state.settings;
+  final authState = ref.watch(authControllerProvider);
 
     return Scaffold(
       appBar: AppBar(title: Text('Settings'.tr())),
@@ -170,12 +172,30 @@ class SettingsPage extends ConsumerWidget {
             title: Text('Change password'.tr()),
             onTap: () => context.push('/change-password'),
           ),
+          SwitchListTile(
+            title: Text('Keep me signed in'.tr()),
+            subtitle: Text('Stay logged in on this device'.tr()),
+            value: authState.keepSignedIn,
+            onChanged: (value) {
+              ref.read(authControllerProvider.notifier).setKeepSignedIn(value);
+            },
+          ),
           ListTile(
             leading: const Icon(Icons.support_agent_rounded),
             title: Text('Contact support'.tr()),
             subtitle: Text(settings.contactEmail),
-            onTap: () => showSuccessToast(
-                context, 'Contact us at ${settings.contactEmail}'),
+            onTap: () async {
+              final uri = Uri(
+                scheme: 'mailto',
+                path: settings.contactEmail,
+              );
+
+              if (await canLaunchUrl(uri)) {
+                await launchUrl(uri);
+              } else {
+                showErrorToast(context, 'Unable to open email client');
+              }
+            },
           ),
           ListTile(
             leading: const Icon(Icons.menu_book_rounded),

@@ -640,6 +640,7 @@ class _AudienceGenderSelector extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final options = {
+      ReportAudienceGender.both: 'Both'.tr(),
       ReportAudienceGender.male: 'Men'.tr(),
       ReportAudienceGender.female: 'Women'.tr(),
     };

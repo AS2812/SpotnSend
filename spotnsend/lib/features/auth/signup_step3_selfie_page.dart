@@ -48,14 +48,17 @@ class _SignupStep3SelfiePageState extends ConsumerState<SignupStep3SelfiePage> {
       return;
     }
 
-    await ref
+    final success = await ref
         .read(authControllerProvider.notifier)
         .signupStep3(SignupStep3Data(selfiePath: _selfiePath!));
 
     final state = ref.read(authControllerProvider);
     if (!mounted) return;
-    if (state.error != null) {
-      showErrorToast(context, state.error!);
+    if (!success || state.error != null) {
+      if (!success && state.error == null) {
+        showErrorToast(
+            context, 'Could not complete sign up. Please try again.'.tr());
+      }
       return;
     }
 
@@ -78,6 +81,7 @@ class _SignupStep3SelfiePageState extends ConsumerState<SignupStep3SelfiePage> {
       title: 'Final step: Selfie verification'.tr(),
       subtitle: 'Capture a quick selfie so we can match it with your ID.'.tr(),
       showBackButton: true,
+      onBack: () => context.pop(),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

@@ -15,6 +15,7 @@ class AuthScaffold extends StatelessWidget {
     this.footer,
     this.showBackButton = false,
     this.maxContentWidth = 520,
+    this.onBack,
   });
 
   final String title;
@@ -23,6 +24,7 @@ class AuthScaffold extends StatelessWidget {
   final Widget? footer;
   final bool showBackButton;
   final double maxContentWidth;
+  final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +37,17 @@ class AuthScaffold extends StatelessWidget {
               scrolledUnderElevation: 0,
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back_ios_new_rounded),
-                onPressed: () => Navigator.of(context).maybePop(),
+                onPressed: () {
+                  if (onBack != null) {
+                    onBack!();
+                    return;
+                  }
+                  if (Navigator.of(context).canPop()) {
+                    Navigator.of(context).pop();
+                  } else {
+                    Navigator.of(context).maybePop();
+                  }
+                },
               ),
             )
           : null,

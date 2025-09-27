@@ -13,7 +13,6 @@ import 'package:spotnsend/core/router/routes.dart';
 import 'package:spotnsend/core/utils/formatters.dart';
 import 'package:spotnsend/data/models/report_models.dart';
 import 'package:spotnsend/data/models/user_models.dart';
-import 'package:spotnsend/features/auth/providers/auth_providers.dart';
 import 'package:spotnsend/features/home/account/providers/account_providers.dart';
 import 'package:spotnsend/features/home/map/category_icon_helpers.dart';
 import 'package:spotnsend/features/home/map/providers/map_providers.dart';
@@ -149,6 +148,19 @@ class _MapPageState extends ConsumerState<MapPage> {
     _mapImagesLoaded = true;
   }
 
+  Future<void> _ensureCategoryLookup() async {
+    if (_reportCategorySlugLookup.isNotEmpty) return;
+
+    try {
+      final categories = await ref.read(reportCategoriesProvider.future);
+      for (final category in categories) {
+        _reportCategorySlugLookup[category.id] = category.slug;
+      }
+    } catch (_) {
+      // Ignore failures; we'll fall back to the icon by category name.
+    }
+  }
+
   Future<void> _syncReportMarkers(List<Report> reports) async {
     final controller = _controller;
     if (controller == null) return;
@@ -163,15 +175,12 @@ class _MapPageState extends ConsumerState<MapPage> {
     await _ensureCategoryLookup();
 
     for (final report in reports) {
-      final slug =
-          report.categorySlug ?? _reportCategorySlugLookup[report.categoryId];
-      final iconKey = mapImageKeyForSlug(slug) ??
-          mapImageKeyForCategoryName(report.categoryName);
+      final iconKey = _iconImageForReport(report);
       final symbol = await controller.addSymbol(
         SymbolOptions(
           geometry: LatLng(report.lat, report.lng),
-          iconImage: iconKey ?? 'marker-15',
-          iconSize: iconKey != null ? 0.38 : 0.58,
+          iconImage: iconKey,
+          iconSize: iconKey == 'marker-15' ? 0.9 : 0.72,
           iconAnchor: 'bottom',
         ),
       );
@@ -199,7 +208,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         SymbolOptions(
           geometry: LatLng(spot.lat, spot.lng),
           iconImage: _savedSpotIconKey,
-          iconSize: 0.45,
+          iconSize: 0.75,
           iconAnchor: 'bottom',
         ),
       );
@@ -210,6 +219,8 @@ class _MapPageState extends ConsumerState<MapPage> {
   Future<void> _highlightSavedSpot(Symbol symbol) async {
     final controller = _controller;
     if (controller == null) return;
+    const normalSize = 0.75;
+    const selectedSize = 0.9;
 
     if (_activeSavedSpotSymbol != null &&
         _savedSpotBySymbol.containsKey(_activeSavedSpotSymbol)) {
@@ -217,7 +228,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         _activeSavedSpotSymbol!,
         SymbolOptions(
           iconImage: _savedSpotIconKey,
-          iconSize: 0.45,
+          iconSize: normalSize,
           iconAnchor: 'bottom',
         ),
       );
@@ -227,7 +238,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       symbol,
       SymbolOptions(
         iconImage: _savedSpotSelectedIconKey,
-        iconSize: 0.56,
+        iconSize: selectedSize,
         iconAnchor: 'bottom',
       ),
     );
@@ -254,73 +265,84 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   /// Draw a true-meters circle as a polygon fill around the user location.
   Future<void> _drawSearchRadius([double? radiusKm]) async {
-    if (_controller == null) return;
+    final controller = _controller;
+    if (controller == null) return;
 
-    // remove old fill
-    if (_radiusFill != null) {
-      await _controller!.removeFill(_radiusFill!);
-      _radiusFill = null;
-    }
-
-    final effectiveRadiusKm = radiusKm ?? ref.read(mapFiltersProvider).radiusKm;
+    final effectiveRadiusKm =
+        radiusKm ?? ref.read(mapFiltersProvider).radiusKm;
     final center = _userLocation ?? _initialCenter;
-    final polygon = _circlePolygon(center, effectiveRadiusKm * 1000, 96);
+    final ring = _buildCircleRing(center, effectiveRadiusKm);
 
-    _radiusFill = await _controller!.addFill(
-      FillOptions(
-        geometry: [polygon], // one ring polygon
-        fillColor: '#2196F3',
-        fillOpacity: 0.15,
-        fillOutlineColor: '#2196F3',
-      ),
-    );
-  }
-
-  /// Create a geodesic circle around [center] with [radiusMeters].
-  /// Returns a closed ring (first == last).
-  List<LatLng> _circlePolygon(LatLng center, double radiusMeters, int steps) {
-    const earth = 6378137.0; // meters
-    final lat = _degToRad(center.latitude);
-    final lng = _degToRad(center.longitude);
-    final dByR = radiusMeters / earth;
-
-    final pts = <LatLng>[];
-    for (int i = 0; i <= steps; i++) {
-      final brg = 2 * math.pi * (i / steps); // 0..2Ï€
-      final lat2 = math.asin(
-        math.sin(lat) * math.cos(dByR) +
-            math.cos(lat) * math.sin(dByR) * math.cos(brg),
-      );
-      final lng2 = lng +
-          math.atan2(
-            math.sin(brg) * math.sin(dByR) * math.cos(lat),
-            math.cos(dByR) - math.sin(lat) * math.sin(lat2),
-          );
-      pts.add(LatLng(_radToDeg(lat2), _radToDeg(lng2)));
-    }
-    return pts;
-  }
-
-  double _degToRad(double deg) => deg * (math.pi / 180.0);
-  double _radToDeg(double rad) => rad * (180.0 / math.pi);
-
-  Future<void> _ensureCategoryLookup() async {
-    if (_reportCategorySlugLookup.isNotEmpty) return;
-    try {
-      final categories = await ref.read(reportCategoriesProvider.future);
-      for (final category in categories) {
-        final slug = resolveCategorySlug(category.slug) ??
-            resolveCategorySlug(category.name);
-        if (slug != null) {
-          _reportCategorySlugLookup[category.id] = slug;
+    if (ring == null) {
+      if (_radiusFill != null) {
+        try {
+          await controller.removeFill(_radiusFill!);
+        } catch (_) {
+          // ignore stale handle removal errors
         }
+        _radiusFill = null;
       }
-    } catch (err, stack) {
-      if (kDebugMode) {
-        debugPrint('Failed to resolve report category lookup: $err');
-        debugPrintStack(stackTrace: stack);
-      }
+      return;
     }
+
+    final fillOptions = FillOptions(
+      geometry: [ring],
+      fillColor: '#4285F4',
+      fillOpacity: 0.12,
+      fillOutlineColor: '#4285F4',
+    );
+
+    if (_radiusFill == null) {
+      _radiusFill = await controller.addFill(fillOptions);
+      return;
+    }
+
+    try {
+      await controller.updateFill(_radiusFill!, fillOptions);
+    } catch (_) {
+      try {
+        await controller.removeFill(_radiusFill!);
+      } catch (_) {
+        // ignore cleanup failure and recreate below
+      }
+      _radiusFill = await controller.addFill(fillOptions);
+    }
+  }
+
+  List<LatLng>? _buildCircleRing(LatLng center, double radiusKm) {
+    if (radiusKm <= 0) {
+      return null;
+    }
+
+    const double earthRadiusMeters = 6378137.0;
+    const int segments = 128;
+    final double radiusMeters = radiusKm * 1000;
+    final double latRadians = center.latitude * math.pi / 180;
+    final List<LatLng> ring = <LatLng>[];
+
+    for (int i = 0; i <= segments; i++) {
+      final double theta = (i / segments) * 2 * math.pi;
+      final double latitude = center.latitude +
+          (radiusMeters / earthRadiusMeters) *
+              (180 / math.pi) *
+              math.cos(theta);
+      final double longitude = center.longitude +
+          (radiusMeters / earthRadiusMeters) *
+              (180 / math.pi) *
+              math.sin(theta) /
+              math.cos(latRadians);
+      ring.add(LatLng(latitude, longitude));
+    }
+
+    return ring;
+  }
+
+  String _iconImageForReport(Report report) {
+    final slug =
+        report.categorySlug ?? _reportCategorySlugLookup[report.categoryId];
+    final iconKey =
+        mapImageKeyForSlug(slug) ?? mapImageKeyForCategoryName(report.categoryName);
+    return iconKey ?? 'marker-15';
   }
 
   // -------------------- Bottom sheets --------------------
@@ -335,6 +357,15 @@ class _MapPageState extends ConsumerState<MapPage> {
     );
   }
 
+  void _handleBack() {
+    if (!mounted) return;
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).maybePop();
+    } else {
+      context.go(RoutePaths.home);
+    }
+  }
+
   // -------------------- Build --------------------
 
   @override
@@ -343,11 +374,12 @@ class _MapPageState extends ConsumerState<MapPage> {
     final filters = ref.watch(mapFiltersProvider);
     final reportsAsync = ref.watch(mapReportsControllerProvider);
     final permissionAsync = ref.watch(locationPermissionProvider);
-    final authState = ref.watch(authControllerProvider);
     final media = MediaQuery.of(context);
     final theme = Theme.of(context);
     final topInset = media.padding.top + 16;
     final bottomInset = media.padding.bottom + 24;
+
+    final canNavigateBack = Navigator.of(context).canPop();
 
     final radiusLabel = filters.radiusKm >= 1
         ? '${filters.radiusKm.toStringAsFixed(1)} km'
@@ -387,6 +419,14 @@ class _MapPageState extends ConsumerState<MapPage> {
                 _mapImagesLoaded = false;
 
                 await _ensureMapImagesLoaded();
+
+                final symbolManager = controller.symbolManager;
+                if (symbolManager != null) {
+                  await symbolManager.setIconAllowOverlap(true);
+                  await symbolManager.setIconIgnorePlacement(true);
+                  await symbolManager.setTextAllowOverlap(true);
+                  await symbolManager.setTextIgnorePlacement(true);
+                }
 
                 controller.onSymbolTapped.add((symbol) {
                   if (_reportBySymbol.containsKey(symbol)) {
@@ -434,7 +474,7 @@ class _MapPageState extends ConsumerState<MapPage> {
             ),
           Positioned(
             top: topInset,
-            left: 16,
+            left: canNavigateBack ? 72 : 16,
             right: 120,
             child: _MapOverviewCard(
               radiusLabel: radiusLabel,
@@ -443,6 +483,19 @@ class _MapPageState extends ConsumerState<MapPage> {
               activeCount: activeCount,
             ),
           ),
+          if (canNavigateBack)
+            Positioned(
+              top: topInset,
+              left: 16,
+              child: SafeArea(
+                bottom: false,
+                child: FloatingActionButton.small(
+                  heroTag: 'map-back',
+                  onPressed: _handleBack,
+                  child: const Icon(Icons.arrow_back_rounded),
+                ),
+              ),
+            ),
           Positioned(
             right: 24,
             top: topInset,
@@ -471,17 +524,6 @@ class _MapPageState extends ConsumerState<MapPage> {
                     icon: Icons.radar,
                     label: 'Adjust radius'.tr(),
                     onPressed: _showRadiusSheet,
-                  ),
-                  const SizedBox(height: 20),
-                  Tooltip(
-                    message: 'Spot incident'.tr(),
-                    triggerMode: TooltipTriggerMode.longPress,
-                    child: FloatingActionButton.extended(
-                      heroTag: 'map-spot-incident',
-                      onPressed: () => _onSpotIncidentPressed(authState),
-                      icon: const Icon(Icons.add_location_alt_rounded),
-                      label: Text('Spot incident'.tr()),
-                    ),
                   ),
                 ],
               ),
@@ -578,17 +620,6 @@ class _MapPageState extends ConsumerState<MapPage> {
       builder: (context) => const MapRadiusSheet(),
     );
   }
-
-  void _onSpotIncidentPressed(AuthState authState) {
-    if (authState.isPendingVerification) {
-      showErrorToast(
-        context,
-        'Reporting is locked until verification is complete.'.tr(),
-      );
-      return;
-    }
-    context.goNamed(AppRoute.homeReport.name);
-  }
 }
 
 class _MapOverviewCard extends StatelessWidget {
@@ -608,19 +639,50 @@ class _MapOverviewCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    Widget infoPill({
+      required IconData icon,
+      required String text,
+    }) {
+      return ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 240),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceVariant.withOpacity(0.6),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 16, color: theme.colorScheme.primary),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    text,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                    softWrap: true,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     final chips = <Widget>[
-      Chip(
-        avatar: const Icon(Icons.radar, size: 16),
-        label: Text('Radius: ' + radiusLabel),
+      infoPill(
+        icon: Icons.radar,
+        text: 'Radius: $radiusLabel',
       ),
-      Chip(
-        avatar: Icon(
-          includeSavedSpots ? Icons.bookmark_added : Icons.bookmark_border,
-          size: 16,
-        ),
-        label: Text(
-          includeSavedSpots ? 'Saved spots on'.tr() : 'Saved spots off'.tr(),
-        ),
+      infoPill(
+        icon: includeSavedSpots ? Icons.bookmark_added : Icons.bookmark_border,
+        text: includeSavedSpots
+            ? 'Saved spots on'.tr()
+            : 'Saved spots off'.tr(),
       ),
     ];
 

@@ -177,7 +177,7 @@ class ReportFormData {
     this.selectedLat,
     this.selectedLng,
     this.agreedToTerms = false,
-    this.peopleGender,
+    this.peopleGender = ReportAudienceGender.both,
     this.notifyScope,
     this.priority,
   });

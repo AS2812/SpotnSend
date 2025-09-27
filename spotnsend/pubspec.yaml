@@ -24,6 +24,8 @@ dependencies:
   supabase_flutter: ^2.5.6
   qr_flutter: ^4.1.0
   equatable: ^2.0.5
+  shared_preferences: ^2.3.2
+  url_launcher: ^6.3.2
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -37,22 +39,23 @@ flutter:
     - .env
     - assets/category_icons/
     - assets/pins/
+    - assets/logo/
 
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "assets/icons/logo_spotnsend.png"
+  image_path: "assets/logo/logo_spotnsend.png"
   remove_alpha_ios: true
   min_sdk_android: 21 # android min sdk min:16, default 21
   web:
     generate: true
-    image_path: "assets/icons/logo_spotnsend.png"
+    image_path: "assets/logo/logo_spotnsend.png"
     background_color: "#hexcode"
     theme_color: "#hexcode"
   windows:
     generate: true
-    image_path: "assets/icons/logo_spotnsend.png"
+    image_path: "assets/logo/logo_spotnsend.png"
     icon_size: 48 # min:48, max:256, default: 48
   macos:
     generate: true
-    image_path: "assets/icons/logo_spotnsend.png"
+    image_path: "assets/logo/logo_spotnsend.png"

@@ -27,27 +27,35 @@ class SignupStep1Data {
     required this.fullName,
     required this.username,
     required this.email,
-    required this.phone,
+    required this.phoneCountryCode,
+    required this.phoneNumber,
     required this.password,
     required this.otp,
+    this.nationalId,
+    this.gender,
   });
 
   final String fullName;
   final String username;
   final String email;
-  final String phone;
+  final String phoneCountryCode;
+  final String phoneNumber;
   final String password;
   final String otp;
+  final String? nationalId;
+  final String? gender;
 }
 
 class SignupStep2Data {
   const SignupStep2Data({
-    required this.idNumber,
+    this.idNumber,
+    this.gender,
     required this.frontIdPath,
     required this.backIdPath,
   });
 
-  final String idNumber;
+  final String? idNumber;
+  final String? gender;
   final String frontIdPath;
   final String backIdPath;
 }
