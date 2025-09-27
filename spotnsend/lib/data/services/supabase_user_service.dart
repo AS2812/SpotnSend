@@ -120,57 +120,6 @@ class SupabaseUserService {
     );
   }
 
-  bool _metaIndicatesVerified(Map<String, dynamic> meta) {
-    for (final key in const [
-      'status',
-      'accountStatus',
-      'account_status',
-      'verificationStatus',
-      'verification_status',
-    ]) {
-      final value = meta[key];
-      if (value is String) {
-        final normalized = value.trim().toLowerCase();
-        if (normalized == 'verified' ||
-            normalized == 'approved' ||
-            normalized == 'active') {
-          return true;
-        }
-      }
-    }
-
-    for (final key in const [
-      'isVerified',
-      'is_verified',
-      'verified',
-      'email_verified',
-      'contactVerified',
-      'contact_verified',
-    ]) {
-      if (_coerceMetaBool(meta[key])) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  bool _coerceMetaBool(dynamic value) {
-    if (value is bool) return value;
-    if (value is num) return value != 0;
-    if (value is String) {
-      final normalized = value.trim().toLowerCase();
-      return normalized == 'true' ||
-          normalized == 't' ||
-          normalized == 'yes' ||
-          normalized == '1' ||
-          normalized == 'verified' ||
-          normalized == 'approved' ||
-          normalized == 'active';
-    }
-    return false;
-  }
-
-
   Future<AppUser> me() async {
     if (_cachedUser != null) return _cachedUser!;
     return fetchProfile(forceRefresh: true);
@@ -431,8 +380,14 @@ class SupabaseUserService {
     if (value is bool) return value;
     if (value is num) return value != 0;
     if (value is String) {
-      final lower = value.toLowerCase();
-      return lower == 'true' || lower == 't' || lower == '1';
+      final lower = value.trim().toLowerCase();
+      return lower == 'true' ||
+          lower == 't' ||
+          lower == 'yes' ||
+          lower == '1' ||
+          lower == 'verified' ||
+          lower == 'approved' ||
+          lower == 'active';
     }
     return false;
   }
