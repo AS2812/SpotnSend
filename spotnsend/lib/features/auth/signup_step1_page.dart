@@ -27,6 +27,8 @@ class _SignupStep1PageState extends ConsumerState<SignupStep1Page> {
   late final TextEditingController _phoneController;
   late final TextEditingController _passwordController;
   late final TextEditingController _otpController;
+  late final TextEditingController _nationalIdDisplayController;
+  late final TextEditingController _genderDisplayController;
 
   @override
   void initState() {
@@ -36,6 +38,8 @@ class _SignupStep1PageState extends ConsumerState<SignupStep1Page> {
     _phoneController = TextEditingController();
     _passwordController = TextEditingController();
     _otpController = TextEditingController(text: '123456');
+    _nationalIdDisplayController = TextEditingController();
+    _genderDisplayController = TextEditingController();
   }
 
   @override
@@ -45,6 +49,8 @@ class _SignupStep1PageState extends ConsumerState<SignupStep1Page> {
     _phoneController.dispose();
     _passwordController.dispose();
     _otpController.dispose();
+    _nationalIdDisplayController.dispose();
+    _genderDisplayController.dispose();
     super.dispose();
   }
 
@@ -71,6 +77,18 @@ class _SignupStep1PageState extends ConsumerState<SignupStep1Page> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authControllerProvider);
+
+    final nationalIdText = authState.draftNationalId ?? '';
+    if (_nationalIdDisplayController.text != nationalIdText) {
+      _nationalIdDisplayController.text = nationalIdText;
+    }
+
+    final genderText = authState.draftGender == null
+        ? 'Will autofill after ID upload'.tr()
+        : (authState.draftGender == 'male' ? 'Male'.tr() : 'Female'.tr());
+    if (_genderDisplayController.text != genderText) {
+      _genderDisplayController.text = genderText;
+    }
 
     ref.listen<AuthState>(authControllerProvider, (previous, next) {
       if (previous?.error != next.error && next.error != null) {
@@ -124,7 +142,20 @@ class _SignupStep1PageState extends ConsumerState<SignupStep1Page> {
               label: 'SMS verification code'.tr(),
               keyboardType: TextInputType.number,
               validator: (value) => validateOtp(context, value),
-              textInputAction: TextInputAction.done,
+              textInputAction: TextInputAction.next,
+            ),
+            const SizedBox(height: 18),
+            AppTextField(
+              controller: _nationalIdDisplayController,
+              label: 'National ID number'.tr(),
+              hint: 'Will autofill after ID upload'.tr(),
+              readOnly: true,
+            ),
+            const SizedBox(height: 18),
+            AppTextField(
+              controller: _genderDisplayController,
+              label: 'Gender'.tr(),
+              readOnly: true,
             ),
             const SizedBox(height: 28),
             AppButton(

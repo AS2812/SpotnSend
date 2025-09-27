@@ -110,8 +110,14 @@ class AccountController {
     String name,
     double lat,
     double lng,
+    double radiusKm,
   ) async {
-    final r = await _svc.addSavedSpot(name: name, lat: lat, lng: lng);
+    final r = await _svc.addSavedSpot(
+      name: name,
+      lat: lat,
+      lng: lng,
+      radiusMeters: radiusKm * 1000,
+    );
     return r.when(
       success: (_) {
         _ref.invalidate(accountSavedSpotsProvider);

@@ -22,6 +22,11 @@ import 'package:spotnsend/features/support/report_bug_page.dart';
 import 'routes.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
+final _mapNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'map');
+final _reportNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'report');
+final _alertsNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'alerts');
+final _accountNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'account');
+final _settingsNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'settings');
 
 final routerNotifierProvider = Provider<RouterNotifier>((ref) {
   return RouterNotifier(ref);
@@ -60,7 +65,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         name: AppRoute.signupStep3.name,
         builder: (context, state) => const SignupStep3SelfiePage(),
       ),
-      // Legal and Support Pages
       GoRoute(
         path: RoutePaths.termsConditions,
         name: AppRoute.termsConditions.name,
@@ -90,6 +94,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             HomeShell(navigationShell: navigationShell),
         branches: [
           StatefulShellBranch(
+            navigatorKey: _mapNavigatorKey,
             routes: [
               GoRoute(
                 path: RoutePaths.homeMap,
@@ -107,6 +112,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ],
           ),
           StatefulShellBranch(
+            navigatorKey: _reportNavigatorKey,
             routes: [
               GoRoute(
                 path: RoutePaths.homeReport,
@@ -116,6 +122,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ],
           ),
           StatefulShellBranch(
+            navigatorKey: _alertsNavigatorKey,
             routes: [
               GoRoute(
                 path: RoutePaths.homeNotifications,
@@ -125,6 +132,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ],
           ),
           StatefulShellBranch(
+            navigatorKey: _accountNavigatorKey,
             routes: [
               GoRoute(
                 path: RoutePaths.homeAccount,
@@ -134,6 +142,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ],
           ),
           StatefulShellBranch(
+            navigatorKey: _settingsNavigatorKey,
             routes: [
               GoRoute(
                 path: RoutePaths.homeSettings,
@@ -163,14 +172,14 @@ class RouterNotifier extends ChangeNotifier {
   String? redirect(BuildContext context, GoRouterState state) {
     final authState = ref.read(authControllerProvider);
     final location = state.uri.path;
-    final isGoingToAuth = location == RoutePaths.login ||
+    final isAuthRoute = location == RoutePaths.login ||
         location == RoutePaths.signupStep1 ||
         location == RoutePaths.signupStep2 ||
         location == RoutePaths.signupStep3 ||
         location == '/';
 
     if (!authState.isAuthenticated) {
-      if (isGoingToAuth) {
+      if (isAuthRoute) {
         return null;
       }
       return RoutePaths.login;
@@ -180,7 +189,7 @@ class RouterNotifier extends ChangeNotifier {
       return RoutePaths.homeMap;
     }
 
-    if (authState.isAuthenticated && isGoingToAuth) {
+    if (authState.isAuthenticated && isAuthRoute) {
       return RoutePaths.homeMap;
     }
 

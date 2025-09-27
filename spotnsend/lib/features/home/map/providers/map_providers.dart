@@ -338,46 +338,158 @@ final nearbyReportsProvider =
   );
 });
 
-final mapAlertsProvider = FutureProvider.autoDispose<List<Alert>>((ref) async {
-  final svc = ref.watch(supabaseAlertsServiceProvider);
-  final filters = ref.watch(mapFiltersProvider);
-  final loc = await ref.watch(currentLocationProvider.future);
+final mapAlertsControllerProvider =
+    AsyncNotifierProvider.autoDispose<MapAlertsController, List<Alert>>(
+        () => MapAlertsController());
 
-  const fallbackLat = 24.7136;
-  const fallbackLng = 46.6753;
+class MapAlertsController extends AsyncNotifier<List<Alert>> {
+  sb.RealtimeChannel? _channel;
+  _AlertParams? _params;
+  static const _maxVisibleAlerts = 200;
 
-  final lat = (loc?.latitude ?? fallbackLat).toDouble();
-  final lng = (loc?.longitude ?? fallbackLng).toDouble();
+  @override
+  Future<List<Alert>> build() async {
+    final svc = ref.watch(supabaseAlertsServiceProvider);
+    final filters = ref.watch(mapFiltersProvider);
+    final loc = await ref.watch(currentLocationProvider.future);
 
-  try {
+    const fallbackLat = 24.7136;
+    const fallbackLng = 46.6753;
+
+    final lat = (loc?.latitude ?? fallbackLat).toDouble();
+    final lng = (loc?.longitude ?? fallbackLng).toDouble();
+    final radiusKm = filters.radiusKm;
+
+    _params = _AlertParams(
+      lat: lat,
+      lng: lng,
+      radiusM: (radiusKm * 1000).round(),
+    );
+
+    ref.onDispose(() {
+      _channel?.unsubscribe();
+      _channel = null;
+    });
+
     final alerts = await svc.fetchNearby(
       lat: lat,
       lng: lng,
-      radiusKm: filters.radiusKm,
+      radiusKm: radiusKm,
     );
 
-    final activeAlerts = alerts
-        .where((alert) => alert.status == AlertStatus.active)
-        .toList()
+    final active = _filterAndSort(alerts);
+    _startRealtime();
+    return active;
+  }
+
+  List<Alert> _filterAndSort(Iterable<Alert> alerts) {
+    final params = _params;
+    final deduped = <String, Alert>{};
+    for (final alert in alerts) {
+      deduped[alert.id] = alert;
+    }
+    final filtered = deduped.values.where((alert) {
+      if (alert.status != AlertStatus.active) return false;
+      if (params == null) return true;
+      final distance = _distanceMeters(
+        params.lat,
+        params.lng,
+        alert.latitude,
+        alert.longitude,
+      );
+      return distance <= params.radiusM + 1;
+    }).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-    return activeAlerts;
-  } on sb.PostgrestException catch (e) {
-    final message = (e.message ?? '').toLowerCase();
-    if (e.code == 'PGRST205' || message.contains('could not find the table')) {
-      return const <Alert>[];
+    if (filtered.length > _maxVisibleAlerts) {
+      return filtered.sublist(0, _maxVisibleAlerts);
     }
-    rethrow;
-  } catch (_) {
-    return const <Alert>[];
+    return filtered;
   }
-});
+
+  void _startRealtime() {
+    if (_channel != null) return;
+
+    final ch = supabase.channel('realtime:alerts');
+
+    ch
+      ..onPostgresChanges(
+        event: sb.PostgresChangeEvent.insert,
+        schema: 'public',
+        table: 'alerts',
+        callback: (payload) => _handleUpsert(payload.newRecord),
+      )
+      ..onPostgresChanges(
+        event: sb.PostgresChangeEvent.update,
+        schema: 'public',
+        table: 'alerts',
+        callback: (payload) => _handleUpsert(payload.newRecord),
+      )
+      ..onPostgresChanges(
+        event: sb.PostgresChangeEvent.delete,
+        schema: 'public',
+        table: 'alerts',
+        callback: (payload) => _handleRemove(payload.oldRecord),
+      )
+      ..subscribe();
+
+    _channel = ch;
+  }
+
+  void _handleUpsert(Map<String, dynamic> row) {
+    final alert = Alert.fromJson(row);
+    if (alert.status != AlertStatus.active || !_isWithinRadius(alert)) {
+      _removeById(alert.id);
+      return;
+    }
+
+    final current = state.value ?? const <Alert>[];
+    final next = <Alert>[alert, ...current.where((a) => a.id != alert.id)];
+    state = AsyncData(_filterAndSort(next));
+  }
+
+  void _handleRemove(Map<String, dynamic> row) {
+    final id = (row['alert_id'] ?? row['id'] ?? '').toString();
+    if (id.isEmpty) return;
+    _removeById(id);
+  }
+
+  void _removeById(String id) {
+    final current = state.value ?? const <Alert>[];
+    if (!current.any((a) => a.id == id)) return;
+    state = AsyncData(_filterAndSort(current.where((a) => a.id != id)));
+  }
+
+  bool _isWithinRadius(Alert alert) {
+    final params = _params;
+    if (params == null) return true;
+    final distance = _distanceMeters(
+      params.lat,
+      params.lng,
+      alert.latitude,
+      alert.longitude,
+    );
+    return distance <= params.radiusM + 1;
+  }
+}
+
+class _AlertParams {
+  const _AlertParams({
+    required this.lat,
+    required this.lng,
+    required this.radiusM,
+  });
+
+  final double lat;
+  final double lng;
+  final int radiusM;
+}
 
 final mapListContentProvider =
     Provider.autoDispose<AsyncValue<MapListContent>>((ref) {
   final reportsAsync = ref.watch(mapReportsControllerProvider);
   final savedSpotsAsync = ref.watch(accountSavedSpotsProvider);
-  final alertsAsync = ref.watch(mapAlertsProvider);
+  final alertsAsync = ref.watch(mapAlertsControllerProvider);
 
   if (reportsAsync.isLoading ||
       savedSpotsAsync.isLoading ||

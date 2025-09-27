@@ -65,6 +65,51 @@ const Map<String, String> arabicLocalizations = {
   'Police: 122 | Ambulance: 123 | Fire: 180':
       'الشرطة: 122 | الإسعاف: 123 | الحريق: 180',
 
+  // Map & reports
+  'Active markers: {count}': 'عدد العلامات النشطة: {count}',
+  'Adjust radius': 'تعديل النطاق',
+  'Filters': 'عوامل التصفية',
+  'List view': 'عرض القائمة',
+  'Live map': 'الخريطة الحية',
+  'Reporting is locked until verification is complete.':
+      'الإبلاغ مقفل حتى تكتمل عملية التحقق.',
+  'Saved spots off': 'إخفاء المواقع المحفوظة',
+  'Saved spots on': 'إظهار المواقع المحفوظة',
+  'Spot incident': 'أبلغ عن حادث',
+  'View list': 'عرض القائمة',
+  'Active reports nearby': 'بلاغات نشطة بالقرب منك',
+  'Alerts & updates': 'التنبيهات والتحديثات',
+  'Alert radius': 'نطاق التنبيه',
+  'Notify which group?': 'من يجب تنبيهه؟',
+  'Select whether to notify men or women.':
+      'حدد ما إذا كان التنبيه يرسل للرجال أو للنساء.',
+  'Men': 'رجال',
+  'Women': 'نساء',
+  'Male': 'ذكر',
+  'Female': 'أنثى',
+  'Select the gender shown on the ID.': 'اختر الجنس الموضح في الهوية.',
+  'Please select a gender.': 'يرجى اختيار الجنس.',
+  'Alerts within {radius}': 'التنبيهات ضمن نطاق {radius}',
+  'Choose who should receive alerts when notifying people.':
+      'اختر من يجب تنبيهه عند إرسال بلاغ للناس.',
+  'Back to map': 'العودة إلى الخريطة',
+  'Failed to load list: {error}': 'تعذر تحميل القائمة: {error}',
+  'Monitoring radius: {radius}': 'نطاق المراقبة: {radius}',
+  'Nearby activity': 'نشاط بالقرب منك',
+  'Nothing to show yet': 'لا توجد بيانات للعرض حالياً',
+  'Saved spots with activity': 'مواقعك المحفوظة التي تحتوي نشاطاً',
+  'more reports': 'بلاغات أخرى',
+  'reports': 'بلاغات',
+  'Adjust your radius or add saved spots to see more updates.':
+      'عدّل نطاقك أو أضف مواقع محفوظة لعرض المزيد من التحديثات.',
+  'Adjust your filters or radius to discover more updates.':
+      'عدّل عوامل التصفية أو النطاق لاكتشاف المزيد من التحديثات.',
+  'Refresh': 'تحديث',
+  'Search radius': 'نطاق البحث',
+  'Radius only changes what you see on the map. Alerts are still delivered based on their own reach.':
+      'النطاق يؤثر فقط على ما تراه على الخريطة. يتم إرسال التنبيهات وفق نطاقها المحدد من المصدر.',
+  'Try again': 'أعد المحاولة',
+
   // Comprehensive Content
   'app_overview_content':
       'يتيح تطبيق SpotnSend للمواطنين الإبلاغ عن المخاطر في الوقت الحقيقي (مثل الحرائق والحوادث والفيضانات والجرائم) واستقبال تنبيهات عن الأخطار القريبة. يستخدم التطبيق خريطة طوارئ تفاعلية لإبقاء المجتمع على اطلاع. كما يقوم بتحويل المعلومات الحرجة إلى خدمات الطوارئ عند الحاجة. من خلال إشراك المواطنين في مراقبة السلامة، يساعد SpotnSend في تقليل زمن الاستجابة في الحالات الطارئة وزيادة الوعي العام بالمخاطر المحلية.',
@@ -184,6 +229,5 @@ const Map<String, String> arabicLocalizations = {
   'Report submitted and nearby users have been alerted.':
       'تم إرسال البلاغ وتنبيه المستخدمين القريبين.',
   'Failed to notify nearby users.': 'تعذّر تنبيه المستخدمين القريبين.',
-  'A new incident was reported nearby.':
-      'تم الإبلاغ عن حادث جديد بالقرب منك.',
+  'A new incident was reported nearby.': 'تم الإبلاغ عن حادث جديد بالقرب منك.',
 };

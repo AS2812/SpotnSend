@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:spotnsend/main.dart';
 
+const _authSentinel = Object();
+
 // Auth state model
 class AuthState {
   final bool isAuthenticated;
@@ -11,6 +13,8 @@ class AuthState {
   final bool keepSignedIn;
   final bool isPendingVerification;
   final sb.User? user;
+  final String? draftNationalId;
+  final String? draftGender;
 
   const AuthState({
     this.isAuthenticated = false,
@@ -19,6 +23,8 @@ class AuthState {
     this.keepSignedIn = true,
     this.isPendingVerification = false,
     this.user,
+    this.draftNationalId,
+    this.draftGender,
   });
 
   AuthState copyWith({
@@ -28,6 +34,8 @@ class AuthState {
     bool? keepSignedIn,
     bool? isPendingVerification,
     sb.User? user,
+    Object? draftNationalId = _authSentinel,
+    Object? draftGender = _authSentinel,
   }) {
     return AuthState(
       isAuthenticated: isAuthenticated ?? this.isAuthenticated,
@@ -37,6 +45,12 @@ class AuthState {
       isPendingVerification:
           isPendingVerification ?? this.isPendingVerification,
       user: user ?? this.user,
+      draftNationalId: identical(draftNationalId, _authSentinel)
+          ? this.draftNationalId
+          : draftNationalId as String?,
+      draftGender: identical(draftGender, _authSentinel)
+          ? this.draftGender
+          : draftGender as String?,
     );
   }
 }
@@ -150,8 +164,18 @@ class AuthNotifier extends Notifier<AuthState> {
   Future<bool> signupStep2(Map<String, dynamic> data) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      // Implementation would go here
-      state = state.copyWith(isLoading: false);
+      final idNumber = data['idNumber']?.toString().trim();
+      final genderRaw = data['gender']?.toString().toLowerCase().trim();
+      final gender =
+          (genderRaw == 'male' || genderRaw == 'female') ? genderRaw : null;
+
+      state = state.copyWith(
+        isLoading: false,
+        error: null,
+        draftNationalId:
+            (idNumber != null && idNumber.isEmpty) ? null : idNumber,
+        draftGender: gender,
+      );
       return true;
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
@@ -185,6 +209,8 @@ class AuthNotifier extends Notifier<AuthState> {
         isAuthenticated: false,
         isLoading: false,
         user: null,
+        draftNationalId: null,
+        draftGender: null,
       );
     } catch (e) {
       state = state.copyWith(

@@ -16,7 +16,7 @@ class MapFiltersSheet extends ConsumerWidget {
     final savedSpotsAsync = ref.watch(accountSavedSpotsProvider);
     final categoriesAsync = ref.watch(reportCategoriesProvider);
 
-    return Padding(
+    return SingleChildScrollView(
       padding: EdgeInsets.only(
         left: 24,
         right: 24,

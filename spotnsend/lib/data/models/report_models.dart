@@ -4,6 +4,8 @@ enum ReportStatus { submitted, underReview, approved, rejected, archived }
 
 enum ReportPriority { low, normal, high, critical }
 
+enum ReportAudienceGender { male, female, both }
+
 class ReportCategory {
   const ReportCategory({
     required this.id,
@@ -43,6 +45,7 @@ class Report {
     this.ownerUserId,
     this.distanceMeters,
     this.media,
+    this.notifyPeopleGender = ReportAudienceGender.both,
   });
 
   final String id;
@@ -61,6 +64,7 @@ class Report {
   final int? ownerUserId;
   final double? distanceMeters;
   final List<ReportMedia>? media;
+  final ReportAudienceGender notifyPeopleGender;
 
   factory Report.fromJson(Map<String, dynamic> json) {
     final statusRaw = (json['status'] ?? json['reportStatus'] ?? 'submitted')
@@ -104,6 +108,8 @@ class Report {
       ownerUserId: ownerId,
       distanceMeters:
           _coerceDouble(json['distanceMeters'] ?? json['distance_meters']),
+      notifyPeopleGender: _parseAudienceGender(
+          json['notify_people_gender'] ?? json['notifyPeopleGender']),
       media: (json['media'] ?? json['mediaItems']) is List
           ? (json['media'] ?? json['mediaItems'])
               .whereType<Map<String, dynamic>>()
@@ -171,7 +177,7 @@ class ReportFormData {
     this.selectedLat,
     this.selectedLng,
     this.agreedToTerms = false,
-    this.radiusKm = 3,
+    this.peopleGender,
     this.notifyScope,
     this.priority,
   });
@@ -188,7 +194,7 @@ class ReportFormData {
   final double? selectedLat;
   final double? selectedLng;
   final bool agreedToTerms;
-  final double radiusKm;
+  final ReportAudienceGender? peopleGender;
   final ReportAudience? notifyScope;
   final ReportPriority? priority;
 
@@ -209,7 +215,7 @@ class ReportFormData {
     Object? selectedLat = _unset,
     Object? selectedLng = _unset,
     bool? agreedToTerms,
-    double? radiusKm,
+    Object? peopleGender = _unset,
     Object? notifyScope = _unset,
     Object? priority = _unset,
   }) {
@@ -236,7 +242,9 @@ class ReportFormData {
           ? this.selectedLng
           : selectedLng as double?,
       agreedToTerms: agreedToTerms ?? this.agreedToTerms,
-      radiusKm: radiusKm ?? this.radiusKm,
+      peopleGender: identical(peopleGender, _unset)
+          ? this.peopleGender
+          : peopleGender as ReportAudienceGender?,
       notifyScope: identical(notifyScope, _unset)
           ? this.notifyScope
           : notifyScope as ReportAudience?,
@@ -314,6 +322,17 @@ ReportPriority _parsePriority(String value) {
       return ReportPriority.critical;
     default:
       return ReportPriority.normal;
+  }
+}
+
+ReportAudienceGender _parseAudienceGender(String? value) {
+  switch (value?.toLowerCase()) {
+    case 'male':
+      return ReportAudienceGender.male;
+    case 'female':
+      return ReportAudienceGender.female;
+    default:
+      return ReportAudienceGender.both;
   }
 }
 

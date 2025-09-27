@@ -96,8 +96,8 @@ class ReportFormNotifier extends Notifier<ReportFormData> {
     state = state.copyWith(mediaPaths: paths);
   }
 
-  void setRadiusKm(double radiusKm) {
-    state = state.copyWith(radiusKm: radiusKm);
+  void setPeopleGender(ReportAudienceGender? value) {
+    state = state.copyWith(peopleGender: value);
   }
 
   void reset() => state = ReportFormData();

@@ -158,9 +158,9 @@ class SupabaseReportService {
           'p_description': formData.description.trim(),
           'p_lat': lat,
           'p_lng': lng,
-          'p_radius': (formData.radiusKm * 1000).round(),
           'p_priority': priority,
           'p_notify': notifyScope,
+          'p_notify_people_gender': _notifyPeopleGender(formData),
         },
         formData: formData,
         user: user,
@@ -201,9 +201,9 @@ class SupabaseReportService {
           'p_description': formData.description.trim(),
           'p_lat': lat,
           'p_lng': lng,
-          'p_radius': (formData.radiusKm * 1000).round(),
           'p_priority': priority,
           'p_notify': notifyScope,
+          'p_notify_people_gender': _notifyPeopleGender(formData),
         },
         formData: formData,
         user: user,
@@ -268,6 +268,10 @@ class SupabaseReportService {
         row['subcategory'];
     row['notify_scope'] =
         row['notify_scope'] ?? (formData.notifyScope ?? formData.audience).name;
+    row['notify_people_gender'] =
+        row['notify_people_gender'] ?? _notifyPeopleGender(formData);
+    row['notifyPeopleGender'] =
+        row['notifyPeopleGender'] ?? row['notify_people_gender'];
     row['user_id'] = row['user_id'] ??
         row['owner_user_id'] ??
         row['created_by'] ??
@@ -307,6 +311,23 @@ class SupabaseReportService {
     }
 
     return Success(report);
+  }
+
+  String _notifyPeopleGender(ReportFormData form) {
+    final audience = form.notifyScope ?? form.audience;
+    if (audience != ReportAudience.people) {
+      return 'both';
+    }
+    switch (form.peopleGender) {
+      case ReportAudienceGender.male:
+        return 'male';
+      case ReportAudienceGender.female:
+        return 'female';
+      case ReportAudienceGender.both:
+        return 'both';
+      case null:
+        return 'both';
+    }
   }
 
   /// All categories with their subcategories (for the Report form).

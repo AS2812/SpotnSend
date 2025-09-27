@@ -41,6 +41,52 @@ const Map<String, String> englishLocalizations = {
   'Language updated.': 'Language updated.',
   'App version ': 'App version ',
 
+  // Map & reports
+  'Active markers: {count}': 'Active markers: {count}',
+  'Adjust radius': 'Adjust radius',
+  'Filters': 'Filters',
+  'List view': 'List view',
+  'Live map': 'Live map',
+  'Reporting is locked until verification is complete.':
+      'Reporting is locked until verification is complete.',
+  'Saved spots off': 'Saved spots off',
+  'Saved spots on': 'Saved spots on',
+  'Spot incident': 'Spot incident',
+  'View list': 'View list',
+  'Active reports nearby': 'Active reports nearby',
+  'Alerts & updates': 'Alerts & updates',
+  'Alert radius': 'Alert radius',
+  'Notify which group?': 'Notify which group?',
+  'Select whether to notify men or women.':
+      'Select whether to notify men or women.',
+  'Men': 'Men',
+  'Women': 'Women',
+  'Male': 'Male',
+  'Female': 'Female',
+  'Will autofill after ID upload': 'Will autofill after ID upload',
+  'Select the gender shown on the ID.': 'Select the gender shown on the ID.',
+  'Please select a gender.': 'Please select a gender.',
+  'Alerts within {radius}': 'Alerts within {radius}',
+  'Choose who should receive alerts when notifying people.':
+      'Choose who should receive alerts when notifying people.',
+  'Back to map': 'Back to map',
+  'Failed to load list: {error}': 'Failed to load list: {error}',
+  'Monitoring radius: {radius}': 'Monitoring radius: {radius}',
+  'Nearby activity': 'Nearby activity',
+  'Nothing to show yet': 'Nothing to show yet',
+  'Saved spots with activity': 'Saved spots with activity',
+  'more reports': 'more reports',
+  'reports': 'reports',
+  'Adjust your radius or add saved spots to see more updates.':
+      'Adjust your radius or add saved spots to see more updates.',
+  'Adjust your filters or radius to discover more updates.':
+      'Adjust your filters or radius to discover more updates.',
+  'Refresh': 'Refresh',
+  'Search radius': 'Search radius',
+  'Radius only changes what you see on the map. Alerts are still delivered based on their own reach.':
+      'Radius only changes what you see on the map. Alerts are still delivered based on their own reach.',
+  'Try again': 'Try again',
+
   // Comprehensive Content
   'app_overview_content':
       'SpotnSend is a citizen safety app that lets users report hazards in real time (such as fires, accidents, floods, or crimes) and receive alerts about nearby dangers. It uses an interactive emergency response map to keep communities informed and safe. The app also forwards critical information to emergency services when needed. By engaging citizens in safety monitoring, SpotnSend helps reduce emergency response times and increase public awareness of local hazards.',
@@ -120,6 +166,5 @@ const Map<String, String> englishLocalizations = {
   'Report submitted and nearby users have been alerted.':
       'Report submitted and nearby users have been alerted.',
   'Failed to notify nearby users.': 'Failed to notify nearby users.',
-  'A new incident was reported nearby.':
-      'A new incident was reported nearby.',
+  'A new incident was reported nearby.': 'A new incident was reported nearby.',
 };

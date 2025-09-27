@@ -92,8 +92,8 @@ class SupabaseUserService {
 
   /// RLS scopes rows to the current user; no need to pass user_id.
   Future<List<SavedSpot>> listSavedSpots() async {
-  final rows = await _client
-    .from('favorite_spots')
+    final rows = await _client
+        .from('favorite_spots')
         .select()
         .order('created_at', ascending: false) as List<dynamic>;
 
@@ -129,13 +129,10 @@ class SupabaseUserService {
     }
   }
 
-  /// Delete by id only; RLS prevents deleting others’ rows.
+  /// Delete by id only; RLS prevents deleting other users' rows.
   Future<Result<List<SavedSpot>>> removeSavedSpot(String id) async {
     try {
-    await _client
-      .from('favorite_spots')
-          .delete()
-          .eq('favorite_spot_id', id);
+      await _client.from('favorite_spots').delete().eq('favorite_spot_id', id);
 
       final spots = await listSavedSpots();
       if (_cachedUser != null) {

@@ -5,7 +5,6 @@ import 'package:location/location.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import 'package:go_router/go_router.dart';
-import 'package:spotnsend/core/utils/result.dart';
 import 'package:spotnsend/core/router/routes.dart';
 import 'package:spotnsend/data/models/alert_models.dart';
 import 'package:spotnsend/data/models/report_models.dart';
@@ -46,17 +45,6 @@ class _ReportPageState extends ConsumerState<ReportPage> {
     return 'Lat: ${lat.toStringAsFixed(5)}, Lng: ${lng.toStringAsFixed(5)}';
   }
 
-  String _formatRadiusLabel(double radiusKm) {
-    if (radiusKm < 1) {
-      final meters = (radiusKm * 1000).round();
-      return '$meters m';
-    }
-    final showDecimal = radiusKm < 10 && radiusKm.remainder(1).abs() > 0.001;
-    final formatted =
-        showDecimal ? radiusKm.toStringAsFixed(1) : radiusKm.round().toString();
-    return '$formatted km';
-  }
-
   @override
   void initState() {
     super.initState();
@@ -67,8 +55,8 @@ class _ReportPageState extends ConsumerState<ReportPage> {
         _descriptionController.text = next.description;
       }
     });
-  _locationSubscription = ref.listenManual<AsyncValue<LocationData?>>(
-    currentLocationProvider, (previous, next) {
+    _locationSubscription = ref.listenManual<AsyncValue<LocationData?>>(
+        currentLocationProvider, (previous, next) {
       next.whenOrNull(data: (location) {
         if (location == null) return;
         final lat = location.latitude;
@@ -227,7 +215,7 @@ class _ReportPageState extends ConsumerState<ReportPage> {
           final audience = submittedForm.notifyScope ?? submittedForm.audience;
           final severity =
               _mapSeverity(submittedForm.priority ?? ReportPriority.normal);
-          final radiusMeters = (submittedForm.radiusKm * 1000).round();
+          const radiusMeters = 500;
 
           String? alertError;
 
@@ -304,9 +292,7 @@ class _ReportPageState extends ConsumerState<ReportPage> {
       }
     });
 
-    final double radiusValue =
-        formState.radiusKm.clamp(kMinSearchRadiusKm, kMaxSearchRadiusKm);
-    final radiusLabel = _formatRadiusLabel(formState.radiusKm);
+    final effectiveAudience = formState.notifyScope ?? formState.audience;
 
     final bottomPadding = MediaQuery.of(context).padding.bottom + 24;
 
@@ -406,6 +392,12 @@ class _ReportPageState extends ConsumerState<ReportPage> {
                   ),
                   const SizedBox(height: 16),
                   _AudienceSelector(selected: formState.audience),
+                  if (effectiveAudience == ReportAudience.people) ...[
+                    const SizedBox(height: 16),
+                    _AudienceGenderSelector(
+                      selected: formState.peopleGender,
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
@@ -576,41 +568,6 @@ class _ReportPageState extends ConsumerState<ReportPage> {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 16),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Alert radius'.tr(),
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      Slider.adaptive(
-                        min: kMinSearchRadiusKm,
-                        max: kMaxSearchRadiusKm,
-                        divisions: ((kMaxSearchRadiusKm - kMinSearchRadiusKm) /
-                                kRadiusStepKm)
-                            .round(),
-                        value: radiusValue,
-                        label: radiusLabel,
-                        onChanged: (value) {
-                          final snapped =
-                              (value / kRadiusStepKm).roundToDouble() *
-                                  kRadiusStepKm;
-                          ref.read(reportFormProvider.notifier).setRadiusKm(
-                                double.parse(snapped.toStringAsFixed(2)),
-                              );
-                        },
-                      ),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: Text(
-                          radiusLabel,
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
                   CheckboxListTile(
                     title:
                         Text('I agree to the SpotnSend reporting policy'.tr()),
@@ -669,6 +626,47 @@ class _AudienceSelector extends ConsumerWidget {
                     .setAudience(entry.key),
               ),
           ],
+        ),
+      ],
+    );
+  }
+}
+
+class _AudienceGenderSelector extends ConsumerWidget {
+  const _AudienceGenderSelector({required this.selected});
+
+  final ReportAudienceGender? selected;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final options = {
+      ReportAudienceGender.male: 'Men'.tr(),
+      ReportAudienceGender.female: 'Women'.tr(),
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Notify which group?'.tr()),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 12,
+          children: [
+            for (final entry in options.entries)
+              ChoiceChip(
+                label: Text(entry.value),
+                selected: selected == entry.key,
+                onSelected: (isSelected) =>
+                    ref.read(reportFormProvider.notifier).setPeopleGender(
+                          isSelected ? entry.key : null,
+                        ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Choose who should receive alerts when notifying people.'.tr(),
+          style: Theme.of(context).textTheme.bodySmall,
         ),
       ],
     );

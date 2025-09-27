@@ -276,6 +276,14 @@ class _EditableTileState extends State<_EditableTile> {
 class _SavedSpotsSection extends ConsumerWidget {
   const _SavedSpotsSection();
 
+  String _radiusLabel(SavedSpot spot) {
+    final radius = spot.radiusMeters ?? 500;
+    if (radius >= 1000) {
+      return '${(radius / 1000).toStringAsFixed(1)} km';
+    }
+    return '${radius.round()} m';
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final savedSpotsAsync = ref.watch(accountSavedSpotsProvider);
@@ -312,8 +320,12 @@ class _SavedSpotsSection extends ConsumerWidget {
                       leading: const Icon(Icons.place_rounded),
                       title: Text(spot.name),
                       subtitle: Text(
-                        context.l10n.formatCoordinates(spot.lat, spot.lng),
+                        '${context.l10n.formatCoordinates(spot.lat, spot.lng)}\n' +
+                            'Alerts within {radius}'.tr(
+                              params: {'radius': _radiusLabel(spot)},
+                            ),
                       ),
+                      isThreeLine: true,
                       trailing: IconButton(
                         icon: const Icon(Icons.delete_outline_rounded),
                         onPressed: () async {
@@ -362,59 +374,95 @@ class _SavedSpotsSection extends ConsumerWidget {
     if (selectedLocation == null) return;
 
     final nameController = TextEditingController();
+    double radiusKm = 1.0;
+
     final result = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Name this location'.tr()),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: InputDecoration(
-                labelText: 'Name'.tr(),
-                hintText: 'e.g., Home, Office, School'.tr(),
-              ),
-              autofocus: true,
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.place, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Selected Location'.tr(),
-                            style: Theme.of(context).textTheme.labelMedium),
-                        Text(
-                          'Lat: ${selectedLocation.latitude.toStringAsFixed(4)}, '
-                          'Lng: ${selectedLocation.longitude.toStringAsFixed(4)}',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
-                    ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateDialog) => AlertDialog(
+          title: Text('Name this location'.tr()),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: InputDecoration(
+                    labelText: 'Name'.tr(),
+                    hintText: 'e.g., Home, Office, School'.tr(),
                   ),
-                ],
-              ),
+                  autofocus: true,
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.place, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Selected Location'.tr(),
+                                style: Theme.of(context).textTheme.labelMedium),
+                            Text(
+                              'Lat: ${selectedLocation.latitude.toStringAsFixed(4)}, '
+                              'Lng: ${selectedLocation.longitude.toStringAsFixed(4)}',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Alert radius'.tr(),
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    Slider.adaptive(
+                      min: 0.5,
+                      max: 10,
+                      divisions: 95,
+                      value: radiusKm,
+                      label: radiusKm >= 1
+                          ? '${radiusKm.toStringAsFixed(1)} km'
+                          : '${(radiusKm * 1000).round()} m',
+                      onChanged: (value) => setStateDialog(
+                          () => radiusKm = (value * 10).round() / 10),
+                    ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        radiusKm >= 1
+                            ? '${radiusKm.toStringAsFixed(1)} km'
+                            : '${(radiusKm * 1000).round()} m',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: Text('Cancel'.tr())),
+            TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: Text('Save'.tr())),
           ],
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: Text('Cancel'.tr())),
-          TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: Text('Save'.tr())),
-        ],
       ),
     );
 
@@ -423,6 +471,7 @@ class _SavedSpotsSection extends ConsumerWidget {
             nameController.text.trim(),
             selectedLocation.latitude,
             selectedLocation.longitude,
+            radiusKm,
           );
       response.when(
         success: (_) {

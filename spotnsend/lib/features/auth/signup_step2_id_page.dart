@@ -24,6 +24,8 @@ class _SignupStep2IdPageState extends ConsumerState<SignupStep2IdPage> {
   late final TextEditingController _idNumberController;
   String? _frontPath;
   String? _backPath;
+  String? _selectedGender;
+  bool _initializedFromDraft = false;
 
   @override
   void initState() {
@@ -60,11 +62,16 @@ class _SignupStep2IdPageState extends ConsumerState<SignupStep2IdPage> {
       showErrorToast(context, 'Please upload both sides of your ID'.tr());
       return;
     }
+    if (_selectedGender == null) {
+      showErrorToast(context, 'Please select a gender.'.tr());
+      return;
+    }
 
     await ref.read(authControllerProvider.notifier).signupStep2({
       'idNumber': _idNumberController.text.trim(),
       'frontIdPath': _frontPath!,
       'backIdPath': _backPath!,
+      'gender': _selectedGender,
     });
 
     final state = ref.read(authControllerProvider);
@@ -76,6 +83,18 @@ class _SignupStep2IdPageState extends ConsumerState<SignupStep2IdPage> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authControllerProvider);
+
+    if (!_initializedFromDraft) {
+      final draftId = authState.draftNationalId;
+      final draftGender = authState.draftGender;
+      if (draftId != null && draftId.isNotEmpty) {
+        _idNumberController.text = draftId;
+      }
+      if (draftGender == 'male' || draftGender == 'female') {
+        _selectedGender = draftGender;
+      }
+      _initializedFromDraft = true;
+    }
 
     ref.listen<AuthState>(authControllerProvider, (previous, next) {
       if (previous?.error != next.error && next.error != null) {
@@ -99,6 +118,39 @@ class _SignupStep2IdPageState extends ConsumerState<SignupStep2IdPage> {
               keyboardType: TextInputType.number,
               validator: (value) => validateNotEmpty(context, value,
                   fieldName: 'National ID number'.tr()),
+            ),
+            const SizedBox(height: 18),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Gender'.tr(),
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 12,
+                  children: [
+                    ChoiceChip(
+                      label: Text('Male'.tr()),
+                      selected: _selectedGender == 'male',
+                      onSelected: (selected) => setState(
+                          () => _selectedGender = selected ? 'male' : null),
+                    ),
+                    ChoiceChip(
+                      label: Text('Female'.tr()),
+                      selected: _selectedGender == 'female',
+                      onSelected: (selected) => setState(
+                          () => _selectedGender = selected ? 'female' : null),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Select the gender shown on the ID.'.tr(),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
             ),
             const SizedBox(height: 22),
             _UploadTile(

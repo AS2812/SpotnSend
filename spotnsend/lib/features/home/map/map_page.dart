@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -10,15 +9,18 @@ import 'package:go_router/go_router.dart';
 import 'package:location/location.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
+import 'package:spotnsend/core/router/routes.dart';
 import 'package:spotnsend/core/utils/formatters.dart';
 import 'package:spotnsend/data/models/report_models.dart';
 import 'package:spotnsend/data/models/user_models.dart';
 import 'package:spotnsend/features/auth/providers/auth_providers.dart';
 import 'package:spotnsend/features/home/account/providers/account_providers.dart';
-import 'package:spotnsend/features/home/map/providers/map_providers.dart';
 import 'package:spotnsend/features/home/map/category_icon_helpers.dart';
+import 'package:spotnsend/features/home/map/providers/map_providers.dart';
 import 'package:spotnsend/features/home/map/widgets/filters_sheet.dart';
 import 'package:spotnsend/features/home/map/widgets/legend.dart';
+import 'package:spotnsend/features/home/map/widgets/list_sheet.dart';
+import 'package:spotnsend/features/home/map/widgets/radius_sheet.dart';
 import 'package:spotnsend/features/home/report/providers/report_providers.dart';
 import 'package:spotnsend/shared/widgets/app_button.dart';
 import 'package:spotnsend/shared/widgets/toasts.dart';
@@ -169,7 +171,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         SymbolOptions(
           geometry: LatLng(report.lat, report.lng),
           iconImage: iconKey ?? 'marker-15',
-          iconSize: iconKey != null ? 0.46 : 0.72,
+          iconSize: iconKey != null ? 0.38 : 0.58,
           iconAnchor: 'bottom',
         ),
       );
@@ -197,7 +199,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         SymbolOptions(
           geometry: LatLng(spot.lat, spot.lng),
           iconImage: _savedSpotIconKey,
-          iconSize: 0.55,
+          iconSize: 0.45,
           iconAnchor: 'bottom',
         ),
       );
@@ -215,7 +217,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         _activeSavedSpotSymbol!,
         SymbolOptions(
           iconImage: _savedSpotIconKey,
-          iconSize: 0.55,
+          iconSize: 0.45,
           iconAnchor: 'bottom',
         ),
       );
@@ -225,7 +227,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       symbol,
       SymbolOptions(
         iconImage: _savedSpotSelectedIconKey,
-        iconSize: 0.68,
+        iconSize: 0.56,
         iconAnchor: 'bottom',
       ),
     );
@@ -341,12 +343,25 @@ class _MapPageState extends ConsumerState<MapPage> {
     final filters = ref.watch(mapFiltersProvider);
     final reportsAsync = ref.watch(mapReportsControllerProvider);
     final permissionAsync = ref.watch(locationPermissionProvider);
+    final authState = ref.watch(authControllerProvider);
     final media = MediaQuery.of(context);
-    final isCompactHeight = media.size.height < 720;
-    final topInset = media.padding.top + (isCompactHeight ? 12 : 20);
-    final bottomInset = media.padding.bottom + (isCompactHeight ? 16 : 24);
+    final theme = Theme.of(context);
+    final topInset = media.padding.top + 16;
+    final bottomInset = media.padding.bottom + 24;
+
+    final radiusLabel = filters.radiusKm >= 1
+        ? '${filters.radiusKm.toStringAsFixed(1)} km'
+        : '${(filters.radiusKm * 1000).round()} m';
 
     final missingKey = mapStyleUrl.contains('YOUR_KEY_HERE');
+    final errorText = reportsAsync.maybeWhen(
+      error: (error, _) => error.toString(),
+      orElse: () => null,
+    );
+    final activeCount = reportsAsync.maybeWhen(
+      data: (value) => value.length,
+      orElse: () => null,
+    );
 
     return Scaffold(
       body: Stack(
@@ -388,7 +403,6 @@ class _MapPageState extends ConsumerState<MapPage> {
                   }
                 });
 
-                // center to user once map is ready
                 final loc = await ref.read(currentLocationProvider.future);
                 if (loc != null) {
                   final where = LatLng(loc.latitude!, loc.longitude!);
@@ -403,7 +417,6 @@ class _MapPageState extends ConsumerState<MapPage> {
                   await _drawSearchRadius();
                 }
 
-                // kick initial draws
                 final reports =
                     await ref.read(mapReportsControllerProvider.future);
                 await _syncReportMarkers(reports);
@@ -414,136 +427,135 @@ class _MapPageState extends ConsumerState<MapPage> {
               },
             ),
           ),
-
-          // Header + radius selector
+          if (missingKey)
+            const Align(
+              alignment: Alignment.center,
+              child: _MissingKeyNotice(),
+            ),
           Positioned(
             top: topInset,
             left: 16,
-            right: 16,
-            child: Column(
-              children: [
-                const _GlassPanel(
-                  padding: EdgeInsets.fromLTRB(22, 22, 22, 20),
-                  child: _MapHeader(),
-                ),
-                const SizedBox(height: 12),
-                _GlassPanel(
-                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
-                  child: _RadiusSelector(selectedRadius: filters.radiusKm),
-                ),
-              ],
+            right: 120,
+            child: _MapOverviewCard(
+              radiusLabel: radiusLabel,
+              includeSavedSpots: filters.includeSavedSpots,
+              isLoading: reportsAsync.isLoading,
+              activeCount: activeCount,
             ),
           ),
-
-          // Bottom controls & legend
           Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
+            right: 24,
+            top: topInset,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildActionButton(
+                    heroTag: 'map-list',
+                    icon: Icons.list_alt,
+                    label: 'List view'.tr(),
+                    onPressed: _showListSheet,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildActionButton(
+                    heroTag: 'map-filters',
+                    icon: Icons.tune,
+                    label: 'Filters'.tr(),
+                    onPressed: _showFiltersSheet,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildActionButton(
+                    heroTag: 'map-radius',
+                    icon: Icons.radar,
+                    label: 'Adjust radius'.tr(),
+                    onPressed: _showRadiusSheet,
+                  ),
+                  const SizedBox(height: 20),
+                  Tooltip(
+                    message: 'Spot incident'.tr(),
+                    triggerMode: TooltipTriggerMode.longPress,
+                    child: FloatingActionButton.extended(
+                      heroTag: 'map-spot-incident',
+                      onPressed: () => _onSpotIncidentPressed(authState),
+                      icon: const Icon(Icons.add_location_alt_rounded),
+                      label: Text('Spot incident'.tr()),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Positioned(
+            left: 16,
+            bottom: bottomInset,
             child: SafeArea(
               top: false,
-              minimum:
-                  EdgeInsets.fromLTRB(16, 0, 16, isCompactHeight ? 16 : 24),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final maxWidth = constraints.maxWidth;
-                  final bool canSplit = maxWidth >= 480;
-                  final double buttonWidth =
-                      canSplit ? (maxWidth - 12) / 2 : maxWidth;
-
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _GlassPanel(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 16),
-                        child: Wrap(
-                          spacing: 12,
-                          runSpacing: 12,
-                          alignment: WrapAlignment.center,
-                          children: [
-                            SizedBox(
-                              width: buttonWidth,
-                              child: AppButton(
-                                label: 'Filter reports'.tr(),
-                                variant: ButtonVariant.secondary,
-                                icon: Icons.tune,
-                                onPressed: _openFilters,
-                              ),
-                            ),
-                            SizedBox(
-                              width: buttonWidth,
-                              child: AppButton(
-                                label: 'List view'.tr(),
-                                variant: ButtonVariant.secondary,
-                                icon: Icons.view_list_rounded,
-                                onPressed: () =>
-                                    context.goNamed('map_list_view'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      const _GlassPanel(
-                        padding:
-                            EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-                        child: MapLegend(),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ),
-
-          // Recenter FAB
-          Positioned(
-            right: 16,
-            bottom: bottomInset + 130,
-            child: FloatingActionButton.small(
-              onPressed: () async {
-                final loc = await ref.read(currentLocationProvider.future);
-                if (loc == null) {
-                  showErrorToast(
-                      context, 'Enable location to recenter the map.'.tr());
-                  return;
-                }
-                final target = LatLng(loc.latitude!, loc.longitude!);
-                _controller?.animateCamera(CameraUpdate.newLatLng(target));
-              },
-              child: const Icon(Icons.my_location_rounded),
-            ),
-          ),
-
-          if (reportsAsync.isLoading && !reportsAsync.hasValue)
-            Align(
-              alignment: Alignment.center,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 320),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Text(
-                    'Loading nearby reports...'.tr(),
-                    softWrap: true,
-                    textAlign: TextAlign.center,
-                  ),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface.withOpacity(0.92),
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 16,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  child: MapLegend(),
                 ),
               ),
             ),
-          if (missingKey) const _MissingKeyNotice(),
+          ),
+          if (errorText != null)
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: bottomInset + 96,
+              child: SafeArea(
+                top: false,
+                child: _MapErrorBanner(message: errorText),
+              ),
+            ),
         ],
       ),
     );
   }
 
-  Future<void> _openFilters() {
-    return showModalBottomSheet<void>(
+  Widget _buildActionButton({
+    required String heroTag,
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+  }) {
+    return Tooltip(
+      message: label,
+      triggerMode: TooltipTriggerMode.longPress,
+      child: FloatingActionButton.small(
+        heroTag: heroTag,
+        onPressed: onPressed,
+        child: Icon(icon),
+      ),
+    );
+  }
+
+  Future<void> _showListSheet() async {
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const MapListSheet(),
+    );
+  }
+
+  Future<void> _showFiltersSheet() async {
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -553,106 +565,139 @@ class _MapPageState extends ConsumerState<MapPage> {
       builder: (context) => const MapFiltersSheet(),
     );
   }
+
+  Future<void> _showRadiusSheet() async {
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+      ),
+      builder: (context) => const MapRadiusSheet(),
+    );
+  }
+
+  void _onSpotIncidentPressed(AuthState authState) {
+    if (authState.isPendingVerification) {
+      showErrorToast(
+        context,
+        'Reporting is locked until verification is complete.'.tr(),
+      );
+      return;
+    }
+    context.goNamed(AppRoute.homeReport.name);
+  }
 }
 
-// -------------------- UI bits --------------------
+class _MapOverviewCard extends StatelessWidget {
+  const _MapOverviewCard({
+    required this.radiusLabel,
+    required this.includeSavedSpots,
+    required this.isLoading,
+    required this.activeCount,
+  });
 
-class _RadiusSelector extends ConsumerWidget {
-  const _RadiusSelector({required this.selectedRadius});
-  final double selectedRadius;
+  final String radiusLabel;
+  final bool includeSavedSpots;
+  final bool isLoading;
+  final int? activeCount;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final value =
-        selectedRadius.clamp(kMinSearchRadiusKm, kMaxSearchRadiusKm).toDouble();
 
-    String formatRadius(double radius) {
-      final l10n = AppLocalizations.current;
-      if (radius < 1) {
-        final meters = (radius * 1000).round();
-        return l10n.translate('{value} m', params: {
-          'value': meters.toString(),
-        });
-      }
-      final remainder = radius.remainder(1).abs();
-      final showDecimal = remainder > 0.001 && radius < 10;
-      final formatted =
-          showDecimal ? radius.toStringAsFixed(1) : radius.round().toString();
-      return l10n.translate('{value} km', params: {
-        'value': formatted,
-      });
-    }
-
-    final label = formatRadius(value);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          'Search radius'.tr(),
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-          ),
+    final chips = <Widget>[
+      Chip(
+        avatar: const Icon(Icons.radar, size: 16),
+        label: Text('Radius: ' + radiusLabel),
+      ),
+      Chip(
+        avatar: Icon(
+          includeSavedSpots ? Icons.bookmark_added : Icons.bookmark_border,
+          size: 16,
         ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: Slider.adaptive(
-                min: kMinSearchRadiusKm,
-                max: kMaxSearchRadiusKm,
-                divisions:
-                    ((kMaxSearchRadiusKm - kMinSearchRadiusKm) / kRadiusStepKm)
-                        .round(),
-                value: value,
-                label: label,
-                onChanged: (v) =>
-                    ref.read(mapFiltersProvider.notifier).setRadius(v),
-              ),
+        label: Text(
+          includeSavedSpots ? 'Saved spots on'.tr() : 'Saved spots off'.tr(),
+        ),
+      ),
+    ];
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withOpacity(0.94),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Live map'.tr(),
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
             ),
-            const SizedBox(width: 12),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: chips,
+          ),
+          if (activeCount != null) ...[
+            const SizedBox(height: 8),
             Text(
-              label,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              'Active markers: {count}'.tr(params: {'count': '$activeCount'}),
+              style: theme.textTheme.bodySmall,
             ),
           ],
-        ),
-      ],
+          if (isLoading) ...[
+            const SizedBox(height: 12),
+            const LinearProgressIndicator(minHeight: 3),
+          ],
+        ],
+      ),
     );
   }
 }
 
-class _MapHeader extends ConsumerWidget {
-  const _MapHeader();
+class _MapErrorBanner extends StatelessWidget {
+  const _MapErrorBanner({required this.message});
+
+  final String message;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final auth = ref.watch(authControllerProvider);
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          'Spot nearby incidents'.tr(),
-          style: theme.textTheme.headlineSmall?.copyWith(
-            fontWeight: FontWeight.w700,
-          ),
+    return Material(
+      borderRadius: BorderRadius.circular(20),
+      color: theme.colorScheme.error.withOpacity(0.9),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 8),
-        Text(
-          auth.isPendingVerification
-              ? 'Verification pending. Reporting is locked, but you can explore alerts in your area.'
-                  .tr()
-              : 'Stay alert with real-time safety intel from your community.'
-                  .tr(),
-          style: theme.textTheme.bodyMedium,
-        ),
-      ],
+      ),
     );
   }
 }
@@ -686,47 +731,6 @@ class _MissingKeyNotice extends StatelessWidget {
             style: TextStyle(color: Colors.white70),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _GlassPanel extends StatelessWidget {
-  const _GlassPanel({
-    required this.child,
-    this.padding = const EdgeInsets.all(16),
-    this.radius = 28,
-  });
-
-  final Widget child;
-  final EdgeInsetsGeometry padding;
-  final double radius;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final surface = theme.colorScheme.surface.withOpacity(0.92);
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(radius),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: surface,
-            borderRadius: BorderRadius.circular(radius),
-            border: Border.all(color: Colors.white.withOpacity(0.16)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.08),
-                blurRadius: 24,
-                offset: const Offset(0, 14),
-              ),
-            ],
-          ),
-          child: child,
-        ),
       ),
     );
   }
