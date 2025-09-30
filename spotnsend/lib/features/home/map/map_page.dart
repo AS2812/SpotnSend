@@ -61,7 +61,7 @@ class MapPage extends ConsumerStatefulWidget {
   ConsumerState<MapPage> createState() => _MapPageState();
 }
 
-class _MapPageState extends ConsumerState<MapPage> {
+class _MapPageState extends ConsumerState<MapPage> with WidgetsBindingObserver {
   // Map state
   MaplibreMapController? _mapController;
   SymbolManager? _symbolManager;
@@ -78,6 +78,8 @@ class _MapPageState extends ConsumerState<MapPage> {
   // Map interaction state
   String? _selectedSavedSpotId;
 Map<int, String> _reportCategorySlugLookup = {};
+  final List<sb.RealtimeChannel> _channels = [];
+  StreamSubscription<sb.AuthState>? _authSub;
   
   // Live GeoJSON mode using Supabase
   bool _useLiveGeoJson = true;
@@ -86,7 +88,6 @@ Map<int, String> _reportCategorySlugLookup = {};
   Timer? _incidentsDebounce;
   Timer? _spotsDebounce;
   Duration _pushDebounce = const Duration(milliseconds: 16);
-  final List<sb.RealtimeChannel> _channels = [];
   
   // Geodesic radius as a filled polygon (real meters)
   Fill? _radiusFill;
@@ -94,6 +95,12 @@ Map<int, String> _reportCategorySlugLookup = {};
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _authSub = supabase.auth.onAuthStateChange.listen((_) async {
+      await _unsubscribeAll();
+      await _subscribeLiveChannels();
+      await _pushAll();
+    });
     _primeUserLocation();
     
     // Load markers immediately when the page is created
@@ -261,7 +268,13 @@ Map<int, String> _reportCategorySlugLookup = {};
         SymbolLayerProperties(
           // Use per-feature icon with fallback to default
           iconImage: ['coalesce', ['get', 'icon'], 'report_pin'],
-          iconSize: 1.0,
+          iconSize: [
+            'interpolate', ['linear'], ['zoom'],
+            12, ['*', 0.6, ['to-number', ['get', 'rscale'], 1.0]],
+            15.5, ['*', 0.85, ['to-number', ['get', 'rscale'], 1.0]],
+            17, ['*', 1.15, ['to-number', ['get', 'rscale'], 1.0]],
+          ],
+          iconAnchor: 'bottom',
           iconAllowOverlap: true,
           iconIgnorePlacement: true,
           // Rotate based on optional bearing property
@@ -289,7 +302,13 @@ Map<int, String> _reportCategorySlugLookup = {};
         'spots_layer',
         SymbolLayerProperties(
           iconImage: _savedSpotIconKey,
-          iconSize: 1.0,
+          iconSize: [
+            'interpolate', ['linear'], ['zoom'],
+            12, ['*', 0.5, ['to-number', ['get', 'rscale'], 1.0]],
+            15.5, ['*', 0.8, ['to-number', ['get', 'rscale'], 1.0]],
+            17, ['*', 1.05, ['to-number', ['get', 'rscale'], 1.0]],
+          ],
+          iconAnchor: 'bottom',
           iconAllowOverlap: true,
           iconIgnorePlacement: true,
           textAllowOverlap: true,
@@ -335,6 +354,14 @@ Map<int, String> _reportCategorySlugLookup = {};
     return earthRadiusKm * c;
   }
 
+  double _radiusScale(double radiusKm) {
+    // 10km baseline = 1.0 scale; clamp to friendly range
+    final s = radiusKm / 10.0;
+    if (s < 0.8) return 0.8;
+    if (s > 1.3) return 1.3;
+    return s;
+  }
+
   Future<void> _pushReports() async {
     final c = _mapController;
     if (c == null) return;
@@ -352,6 +379,13 @@ Map<int, String> _reportCategorySlugLookup = {};
         final cid = (props['category_id'] as num?)?.toInt();
         final matchesCategory = activeCategoryIds.isEmpty || (cid != null && activeCategoryIds.contains(cid));
         return withinRadius && matchesCategory;
+      }).map((feat) {
+        final props = Map<String, dynamic>.from(feat['properties'] as Map<String, dynamic>? ?? {});
+        props['rscale'] = _radiusScale(radiusKm);
+        return {
+          ...feat,
+          'properties': props,
+        };
       });
       final fc = _featureCollection(filtered);
       await c.setGeoJsonSource('reports_src', fc);
@@ -363,6 +397,10 @@ Map<int, String> _reportCategorySlugLookup = {};
     if (c == null) return;
     try {
       final filters = ref.read(mapFiltersProvider);
+      if (!filters.includeSavedSpots) {
+        await c.setGeoJsonSource('spots_src', _featureCollection(const []));
+        return;
+      }
       final center = _userLocation ?? _initialCenter;
       final radiusKm = filters.radiusKm;
       final filtered = _spotsById.values.where((feat) {
@@ -370,6 +408,13 @@ Map<int, String> _reportCategorySlugLookup = {};
         final lng = (coords[0] as num).toDouble();
         final lat = (coords[1] as num).toDouble();
         return _haversineKm(lat, lng, center.latitude, center.longitude) <= radiusKm;
+      }).map((feat) {
+        final props = Map<String, dynamic>.from(feat['properties'] as Map<String, dynamic>? ?? {});
+        props['rscale'] = _radiusScale(radiusKm);
+        return {
+          ...feat,
+          'properties': props,
+        };
       });
       final fc = _featureCollection(filtered);
       await c.setGeoJsonSource('spots_src', fc);
@@ -617,8 +662,178 @@ Map<int, String> _reportCategorySlugLookup = {};
     });
   }
 
+  Future<void> _pushAll() async {
+    if (_useLiveGeoJson) {
+      await _pushReports();
+      await _pushFavoriteSpots();
+    } else {
+      await _syncAllMarkers();
+    }
+  }
+
+  Future<void> _unsubscribeAll() async {
+    for (final ch in _channels) {
+      try {
+        await ch.unsubscribe();
+      } catch (_) {}
+    }
+    _channels.clear();
+  }
+
+  Future<void> _subscribeLiveChannels() async {
+    // Reports channel
+    final incCh = supabase.channel('public:reports')
+      ..onPostgresChanges(
+        event: sb.PostgresChangeEvent.insert,
+        schema: 'public',
+        table: 'reports',
+        callback: (payload) {
+          final r = payload.newRecord;
+          if (r == null) return;
+          final id = (r['report_id'] ?? r['id']).toString();
+          final lat = (r['latitude'] as num).toDouble();
+          final lng = (r['longitude'] as num).toDouble();
+          final cid = (r['category_id'] as num?)?.toInt();
+          final slug = cid != null ? _reportCategorySlugLookup[cid] : null;
+          final iconKey = mapImageKeyForSlug(slug) ?? 'report_pin';
+          final props = {
+            'icon': iconKey,
+            'category_id': cid,
+            'created_at': r['created_at'],
+          };
+          _incidentsById[id] = _pointFeature(id: id, lat: lat, lng: lng, properties: props);
+          _schedulePushReports();
+        },
+      )
+      ..onPostgresChanges(
+        event: sb.PostgresChangeEvent.update,
+        schema: 'public',
+        table: 'reports',
+        callback: (payload) {
+          final r = payload.newRecord;
+          if (r == null) return;
+          final id = (r['report_id'] ?? r['id']).toString();
+          final lat = (r['latitude'] as num).toDouble();
+          final lng = (r['longitude'] as num).toDouble();
+          final prev = _incidentsById[id];
+          final cid = (r['category_id'] as num?)?.toInt();
+          final slug = cid != null ? _reportCategorySlugLookup[cid] : null;
+          final iconKey = mapImageKeyForSlug(slug) ?? 'report_pin';
+          final props = {
+            'icon': iconKey,
+            'category_id': cid,
+            'created_at': r['created_at'],
+          };
+          double? bearing;
+          if (prev != null) {
+            final coords = prev['geometry']['coordinates'] as List;
+            final prevLng = (coords[0] as num).toDouble();
+            final prevLat = (coords[1] as num).toDouble();
+            bearing = _bearingDegrees(prevLat, prevLng, lat, lng);
+          }
+          final nextProps = {
+            ...?prev?['properties'] as Map<String, dynamic>?,
+            ...props,
+            if (bearing != null) 'bearing': bearing,
+          };
+          _incidentsById[id] = _pointFeature(id: id, lat: lat, lng: lng, properties: nextProps);
+          _schedulePushReports();
+        },
+      )
+      ..onPostgresChanges(
+        event: sb.PostgresChangeEvent.delete,
+        schema: 'public',
+        table: 'reports',
+        callback: (payload) {
+          final r = payload.oldRecord;
+          if (r == null) return;
+          final id = (r['report_id'] ?? r['id']).toString();
+          _incidentsById.remove(id);
+          _schedulePushReports();
+        },
+      );
+    await incCh.subscribe();
+    _channels.add(incCh);
+
+    // Favorite spots channel
+    final spotsCh = supabase.channel('public:favorite_spots')
+      ..onPostgresChanges(
+        event: sb.PostgresChangeEvent.insert,
+        schema: 'public',
+        table: 'favorite_spots',
+        callback: (payload) {
+          final r = payload.newRecord;
+          if (r == null) return;
+          final id = (r['favorite_spot_id'] ?? r['id']).toString();
+          final lat = (r['latitude'] as num).toDouble();
+          final lng = (r['longitude'] as num).toDouble();
+          final props = {
+            'user_id': r['user_id'],
+            'created_at': r['created_at'],
+          };
+          _spotsById[id] = _pointFeature(id: id, lat: lat, lng: lng, properties: props);
+          _schedulePushFavoriteSpots();
+        },
+      )
+      ..onPostgresChanges(
+        event: sb.PostgresChangeEvent.update,
+        schema: 'public',
+        table: 'favorite_spots',
+        callback: (payload) {
+          final r = payload.newRecord;
+          if (r == null) return;
+          final id = (r['favorite_spot_id'] ?? r['id']).toString();
+          final lat = (r['latitude'] as num).toDouble();
+          final lng = (r['longitude'] as num).toDouble();
+          final props = {
+            'user_id': r['user_id'],
+            'created_at': r['created_at'],
+          };
+          _spotsById[id] = _pointFeature(id: id, lat: lat, lng: lng, properties: props);
+          _schedulePushFavoriteSpots();
+        },
+      )
+      ..onPostgresChanges(
+        event: sb.PostgresChangeEvent.delete,
+        schema: 'public',
+        table: 'favorite_spots',
+        callback: (payload) {
+          final r = payload.oldRecord;
+          if (r == null) return;
+          final id = (r['favorite_spot_id'] ?? r['id']).toString();
+          _spotsById.remove(id);
+          _schedulePushFavoriteSpots();
+        },
+      );
+    await spotsCh.subscribe();
+    _channels.add(spotsCh);
+  }
+
+  
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Re-initialize style-dependent state and re-push data
+      () async {
+        await _unsubscribeAll();
+        _imagesLoaded = false;
+        await _ensureMapImagesLoaded();
+        if (_useLiveGeoJson) {
+          await _ensureLiveSourcesAndLayers();
+        }
+        await _pushAll();
+        await _subscribeLiveChannels();
+      }();
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    try {
+      _authSub?.cancel();
+    } catch (_) {}
     _ttlSweeper?.cancel();
     _incidentsDebounce?.cancel();
     _spotsDebounce?.cancel();
@@ -1090,7 +1305,13 @@ Map<int, String> _reportCategorySlugLookup = {};
                 await _drawSearchRadius();
                 if (_useLiveGeoJson) {
                   await _ensureLiveSourcesAndLayers();
-                  await _initialLoadAndSubscribe();
+                  // Immediately show cached data, then ensure subscriptions
+                  await _pushAll();
+                  if (_incidentsById.isEmpty && _spotsById.isEmpty) {
+                    await _initialLoadAndSubscribe();
+                  } else if (_channels.isEmpty) {
+                    await _subscribeLiveChannels();
+                  }
                 } else {
                   await _syncAllMarkers();
                 }
