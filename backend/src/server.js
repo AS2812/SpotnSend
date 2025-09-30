@@ -1,4 +1,3 @@
-import http from 'http';
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
@@ -9,7 +8,6 @@ import fs from 'fs';
 import env from './config/env.js';
 import apiRoutes from './routes/index.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
-import { createSocketServer } from './sockets/index.js';
 
 const app = express();
 
@@ -36,12 +34,7 @@ app.use('/api', apiRoutes);
 app.use(notFound);
 app.use(errorHandler);
 
-const server = http.createServer(app);
-const io = createSocketServer(server);
-app.set('io', io);
-
-server.listen(env.server.port, () => {
+const server = app.listen(env.server.port, () => {
   console.log(`API running on port ${env.server.port}`);
 });
-
-export { app, server, io };
+export { app, server };

@@ -10,7 +10,6 @@ import {
   updateDispatch,
   getAuthoritiesNear
 } from '../services/reportService.js';
-import { emitReportUpdate } from '../sockets/index.js';
 
 export async function handleCreateReport(req, res, next) {
   try {
@@ -23,10 +22,6 @@ export async function handleCreateReport(req, res, next) {
       }));
     }
     const report = await createReport(req.user.sub, payload);
-    const io = req.app.get('io');
-    if (io) {
-      emitReportUpdate(io, report.city, { reportId: report.report_id, status: report.status, priority: report.priority });
-    }
     res.status(201).json(report);
   } catch (error) {
     next(error);
@@ -81,10 +76,6 @@ export async function handleFlagReport(req, res, next) {
 export async function handleUpdateReportStatus(req, res, next) {
   try {
     const updated = await updateReportStatus(Number(req.params.id), req.body, req.user.sub);
-    const io = req.app.get('io');
-    if (io) {
-      emitReportUpdate(io, updated.city, { reportId: updated.report_id, status: updated.status, priority: updated.priority });
-    }
     res.json(updated);
   } catch (error) {
     next(error);

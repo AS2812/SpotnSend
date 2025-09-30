@@ -5,7 +5,6 @@ import {
   sendNotification,
   getNotificationById
 } from '../services/notificationService.js';
-import { emitUserNotification } from '../sockets/index.js';
 
 export async function handleListNotifications(req, res, next) {
   try {
@@ -36,9 +35,7 @@ export async function handleDeleteNotifications(req, res, next) {
 
 export async function handleSendNotification(req, res, next) {
   try {
-    const notification = await sendNotification(req.body, req.body.channels);
-    const io = req.app.get('io');
-    if (io) emitUserNotification(io, notification.user_id, notification);
+  const notification = await sendNotification(req.body, req.body.channels);
     res.status(201).json(notification);
   } catch (error) {
     next(error);

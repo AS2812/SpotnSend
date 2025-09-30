@@ -210,7 +210,7 @@ class _ReportPageState extends ConsumerState<ReportPage> {
 
           ref.read(mapReportsControllerProvider.notifier).addOrReplace(report);
           ref.invalidate(mapReportsControllerProvider);
-          ref.invalidate(nearbyReportsProvider);
+          // ref.invalidate(nearbyReportsProvider); // Removed: provider no longer exists after refactor
 
           final audience = submittedForm.notifyScope ?? submittedForm.audience;
           final severity =

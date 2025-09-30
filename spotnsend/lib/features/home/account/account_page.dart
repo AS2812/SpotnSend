@@ -357,15 +357,12 @@ class _SavedSpotsSection extends ConsumerWidget {
 
   Future<void> _addSpot(BuildContext context, WidgetRef ref) async {
     LatLng? initial;
-    try {
-      final location = await ref.read(currentLocationProvider.future);
-      final lat = location?.latitude;
-      final lng = location?.longitude;
-      if (lat != null && lng != null) {
-        initial = LatLng(lat, lng);
-      }
-    } catch (_) {
-      // ignore and fall back to default center
+    final locationAsync = ref.read(currentLocationProvider);
+    final location = locationAsync.value;
+    final lat = location?.latitude;
+    final lng = location?.longitude;
+    if (lat != null && lng != null) {
+      initial = LatLng(lat, lng);
     }
 
     final selectedLocation = await context.showLocationPicker(

@@ -37,17 +37,14 @@ class _LocationPickerState extends ConsumerState<LocationPicker> {
 
   Future<void> _primeInitialLocation() async {
     if (_selectedLocation != null) return;
-    try {
-      final location = await ref.read(currentLocationProvider.future);
-      final lat = location?.latitude;
-      final lng = location?.longitude;
-      if (lat != null && lng != null) {
-        setState(() {
-          _selectedLocation = LatLng(lat, lng);
-        });
-      }
-    } catch (_) {
-      // ignore; fallback to default camera
+    final locationAsync = ref.read(currentLocationProvider);
+    final location = locationAsync.value;
+    final lat = location?.latitude;
+    final lng = location?.longitude;
+    if (lat != null && lng != null) {
+      setState(() {
+        _selectedLocation = LatLng(lat, lng);
+      });
     }
   }
 
@@ -122,24 +119,21 @@ class _LocationPickerState extends ConsumerState<LocationPicker> {
   }
 
   Future<void> _centerOnCurrentLocation() async {
-    try {
-      final location = await ref.read(currentLocationProvider.future);
-      final lat = location?.latitude;
-      final lng = location?.longitude;
-      if (lat == null || lng == null) return;
-      final target = LatLng(lat, lng);
-      await _controller?.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(target: target, zoom: 15.5),
-        ),
-      );
-      setState(() {
-        _selectedLocation = target;
-      });
-      await _addMarker(target);
-    } catch (_) {
-      // ignore when location unavailable
-    }
+    final locationAsync = ref.read(currentLocationProvider);
+    final location = locationAsync.value;
+    final lat = location?.latitude;
+    final lng = location?.longitude;
+    if (lat == null || lng == null) return;
+    final target = LatLng(lat, lng);
+    await _controller?.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(target: target, zoom: 15.5),
+      ),
+    );
+    setState(() {
+      _selectedLocation = target;
+    });
+    await _addMarker(target);
   }
 
   @override

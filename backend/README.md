@@ -1,6 +1,6 @@
 # Civic Watch Backend (PostgreSQL + Express)
 
-This service exposes the REST API, WebSocket notifications, and background helpers required by the Flutter clients.
+This service exposes the REST API and background helpers required by the Flutter clients.
 
 ## Prerequisites
 
@@ -52,8 +52,7 @@ backend/
     controllers/      # request handling logic
     middleware/       # auth, validation, rate limiters, uploads, errors
     routes/           # REST partitions (auth, users, reports, notifications, admin)
-    services/         # business logic and database queries
-    sockets/          # Socket.IO setup and emit helpers
+   services/         # business logic and database queries
     validators/       # Zod schemas shared by routes
     server.js         # Express bootstrap
 ```
@@ -81,15 +80,15 @@ See the route files under `src/routes` for the full list and query/JSON payloads
 - Use the `/auth/signup/*` routes to drive the three-step onboarding wizard. Persist the `userId` returned from Step 1 for subsequent steps.
 - Store `accessToken` + `refreshToken` from `/auth/login` in secure storage. Add the header `Authorization: Bearer <token>` to all authenticated requests.
 - Use `/reports/nearby` for the Map and List tabs. Pass `radius`, `categories`, `subcategories`, and `statuses` query parameters to match the user?s filters.
-- After submitting a report, listen on the WebSocket channel `report:update` to refresh UI cards in real-time.
-- Notifications tab hits `/notifications` (list) and `/notifications/mark` (mark read). The server also emits `notification` events over WebSocket for live updates.
+- After submitting or updating a report, re-fetch `/reports/nearby` (the mobile app polls every few seconds to keep markers fresh).
+- Notifications tab hits `/notifications` (list) and `/notifications/mark` (mark read); clients can refresh on demand.
 - Reporting locks are enforced in the database via triggers; the API will return `403` if an unverified user attempts to submit a report.
 
 ## Background tasks / integrations
 
 - Replace the placeholder SMS + email providers using the keys defined in `.env` to send OTP codes and authority alerts.
 - The `uploads` directory is provided for local development. In production swap `multer`?s storage with S3, Azure Blob Storage, or any managed object store.
-- Socket.IO rooms are used for `user:{id}` (notifications) and `city:{name}` (report updates). Join rooms from Flutter using the same naming convention.
+- Realtime sockets have been removed in favour of periodic polling.
 
 ## Linting
 

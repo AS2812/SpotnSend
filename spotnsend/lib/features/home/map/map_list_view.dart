@@ -23,14 +23,12 @@ class MapListView extends ConsumerWidget {
     final contentAsync = ref.watch(mapListContentProvider);
 
     Future<void> _refresh() async {
-      ref.invalidate(mapReportsControllerProvider);
+      ref.invalidate(mapMarkersControllerProvider);
       ref.invalidate(accountSavedSpotsProvider);
-      ref.invalidate(mapAlertsControllerProvider);
       // wait for dependent futures so the refresh indicator feels responsive
       await Future.wait([
-        ref.read(mapReportsControllerProvider.future),
+        ref.read(mapMarkersControllerProvider.future),
         ref.read(accountSavedSpotsProvider.future),
-        ref.read(mapAlertsControllerProvider.future),
       ]);
     }
 

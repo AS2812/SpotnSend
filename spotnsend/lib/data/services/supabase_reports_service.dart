@@ -30,6 +30,7 @@ class SupabaseReportService {
   SupabaseReportService(this._client);
 
   final SupabaseClient _client;
+  SupabaseClient get client => _client;
 
   SupabaseQueryBuilder _reports() => _client.from('reports');
   SupabaseQueryBuilder _categories() => _client.from('report_categories');

@@ -13,6 +13,7 @@ class SupabaseAlertsService {
   SupabaseAlertsService(this._client);
 
   final SupabaseClient _client;
+  SupabaseClient get client => _client;
 
   SupabaseQueryBuilder _alerts() => _client.from('alerts');
 

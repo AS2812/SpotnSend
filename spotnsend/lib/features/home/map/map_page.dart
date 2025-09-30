@@ -3,6 +3,8 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
@@ -15,6 +17,8 @@ import 'package:go_router/go_router.dart';
 import 'package:location/location.dart';
 
 import 'package:maplibre_gl/maplibre_gl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
+import 'package:spotnsend/main.dart';
 
 import 'package:spotnsend/core/router/routes.dart';
 
@@ -58,114 +62,103 @@ class MapPage extends ConsumerStatefulWidget {
 }
 
 class _MapPageState extends ConsumerState<MapPage> {
-  MaplibreMapController? _controller;
-
-  // Markers by type
-
-  final Map<Symbol, Report> _reportBySymbol = {};
-
-  final Map<Symbol, SavedSpot> _savedSpotBySymbol = {};
-
-  final Map<int, String> _reportCategorySlugLookup = {};
-
-  // User & view state
-
+  // Map state
+  MaplibreMapController? _mapController;
+  SymbolManager? _symbolManager;
+  
+  // Location and UI state
   LatLng _initialCenter = const LatLng(24.7136, 46.6753);
-
   LatLng? _userLocation;
-
   Symbol? _userLocationMarker;
-
-  Symbol? _activeSavedSpotSymbol;
-
-  bool _mapImagesLoaded = false;
-
+  bool _markersInitialized = false;
+  bool _imagesLoaded = false;
   double _currentZoom = 15.5;
-
   double? _lastScaledZoom;
-
+  
+  // Map interaction state
+  String? _selectedSavedSpotId;
+Map<int, String> _reportCategorySlugLookup = {};
+  
+  // Live GeoJSON mode using Supabase
+  bool _useLiveGeoJson = true;
+  final Map<String, Map<String, dynamic>> _incidentsById = {};
+  final Map<String, Map<String, dynamic>> _spotsById = {};
+  Timer? _incidentsDebounce;
+  Timer? _spotsDebounce;
+  Duration _pushDebounce = const Duration(milliseconds: 16);
+  final List<sb.RealtimeChannel> _channels = [];
+  
   // Geodesic radius as a filled polygon (real meters)
-
   Fill? _radiusFill;
 
   @override
   void initState() {
     super.initState();
-
     _primeUserLocation();
-
-    // After first frame, wire listeners to providers
-
+    
+    // Load markers immediately when the page is created
+    _loadMarkersImmediately();
+    
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // User location -> recenter & redraw radius when GPS updates
-
+      // 1) User location updates -> recenter & redraw radius
       ref.listen<AsyncValue<LocationData?>>(currentLocationProvider,
-          (prev, next) {
+          (prev, next) async {
         next.whenOrNull(data: (data) async {
           if (data == null) return;
-
           final where = LatLng(data.latitude!, data.longitude!);
-
           _userLocation = where;
-
           _initialCenter = where;
-
-          if (_controller != null) {
-            await _controller!.animateCamera(
+          if (_mapController != null) {
+            await _mapController!.animateCamera(
               CameraUpdate.newCameraPosition(
                 CameraPosition(target: where, zoom: 15.5),
               ),
             );
-
             await _putUserMarker(where);
-
             await _drawSearchRadius();
           }
         });
       });
-
-      // Nearby reports (use realtime-aware provider)
-
-      ref.listen<AsyncValue<List<Report>>>(mapReportsControllerProvider,
-          (prev, next) {
-        next.whenOrNull(data: (reports) => _syncReportMarkers(reports));
-      });
-
-      // Saved spots (pretty cyan markers), respect filter
-
-      ref.listen<AsyncValue<List<SavedSpot>>>(accountSavedSpotsProvider,
+      
+      // 2) Listen to the markers controller directly for instant updates
+      ref.listen<AsyncValue<List<MapMarker>>>(mapMarkersControllerProvider, 
           (prev, next) async {
-        final spots = next.value ?? const <SavedSpot>[];
-
-        await _syncSavedSpotMarkers(spots);
+        if (_useLiveGeoJson) return; // skip legacy symbol syncing in live mode
+        final controller = _mapController;
+        if (controller == null) return;
+        if (next.hasValue) {
+          final markers = next.value ?? [];
+          debugPrint('[MapPage] Markers from controller: count=${markers.length}');
+          await _syncAllMarkers();
+        }
       });
-
-      // Radius knob changed: redraw circle when the radius slider moves
-
+      
+      // 3) Filters -> redraw radius, toggle saved spots, refresh reports
       ref.listen<ReportFilters>(mapFiltersProvider, (prev, next) async {
         final prevRadius = prev?.radiusKm;
         final prevSaved = prev?.includeSavedSpots;
         final prevCategories = prev?.categoryIds;
-
         final radiusChanged = prevRadius != next.radiusKm;
         final savedChanged = prevSaved != next.includeSavedSpots;
         final categoriesChanged = prevCategories == null
             ? next.categoryIds.isNotEmpty
             : !(prevCategories.containsAll(next.categoryIds) &&
                 next.categoryIds.containsAll(prevCategories));
-
         if (radiusChanged) {
           await _drawSearchRadius(next.radiusKm);
         }
-        if (savedChanged) {
-          final spots = await ref.read(accountSavedSpotsProvider.future);
-          await _syncSavedSpotMarkers(spots);
-        }
-        if (radiusChanged || categoriesChanged) {
-          unawaited(ref.read(mapReportsControllerProvider.notifier).refresh());
-        }
       });
     });
+  }
+  
+  // Load markers immediately when the page is created
+  void _loadMarkersImmediately() {
+    final markersAsync = ref.read(mapMarkersControllerProvider);
+    if (markersAsync.hasValue) {
+      final markers = markersAsync.value ?? [];
+      debugPrint('[MapPage] Loading markers immediately: count=${markers.length}');
+      // We'll sync these markers when the map is created
+    }
   }
 
   Future<void> _primeUserLocation() async {
@@ -183,34 +176,49 @@ class _MapPageState extends ConsumerState<MapPage> {
   // -------------------- Markers & Overlays --------------------
 
   Future<void> _ensureMapImagesLoaded() async {
-    final controller = _controller;
+    final controller = _mapController;
 
-    if (controller == null || _mapImagesLoaded) return;
+    if (controller == null) return;
+    
+    // Reset flag to force reload
+    _imagesLoaded = false;
+    
+    debugPrint('[MapPage] Loading map images...');
 
     Future<void> registerPin(String key, String assetPath) async {
       try {
+        debugPrint('[MapPage] Loading pin image: $key from $assetPath');
         final bytes = await rootBundle.load(assetPath);
-
         await controller.addImage(key, bytes.buffer.asUint8List());
-      } catch (err, stack) {
-        if (kDebugMode) {
-          debugPrint('Failed to register map image $assetPath: $err');
-
-          debugPrintStack(stackTrace: stack);
+        debugPrint('[MapPage] Successfully loaded pin image: $key');
+      } on PlatformException catch (error) {
+        // Treat alreadyExists as success to avoid blocking repeated loads
+        if (error.code == 'alreadyExists') {
+          debugPrint('[MapPage] Pin image already registered: $key');
+          return;
         }
+        debugPrint('[MapPage] PlatformException registering image $key: ${error.message}');
+      } catch (err, stack) {
+        debugPrint('Failed to register map image $assetPath: $err');
+        debugPrintStack(stackTrace: stack);
       }
     }
-
+    
+    // Add default report pin
+    await registerPin('report_pin', 'assets/pins/select.png');
+    
+    // Register category icons
     await registerCategoryIcons(controller);
 
+    // Register saved spot pins
     await registerPin(_savedSpotIconKey, 'assets/pins/saved_spot.png');
-
     await registerPin(
       _savedSpotSelectedIconKey,
       'assets/pins/saved_spot_selected.png',
     );
 
-    _mapImagesLoaded = true;
+    debugPrint('[MapPage] All map images loaded successfully');
+    _imagesLoaded = true;
   }
 
   Future<void> _ensureCategoryLookup() async {
@@ -227,112 +235,538 @@ class _MapPageState extends ConsumerState<MapPage> {
     }
   }
 
-  Future<void> _syncReportMarkers(List<Report> reports) async {
-    final controller = _controller;
+  // -------------------- Live GeoJSON (Supabase) --------------------
 
-    if (controller == null) return;
+  Future<void> _ensureLiveSourcesAndLayers() async {
+    final c = _mapController;
+    if (c == null) return;
 
-    await _ensureMapImagesLoaded();
-
-    for (final symbol in _reportBySymbol.keys.toList(growable: false)) {
-      await controller.removeSymbol(symbol);
-    }
-
-    _reportBySymbol.clear();
-
-    await _ensureCategoryLookup();
-
-    for (final report in reports) {
-      final iconKey = _iconImageForReport(report);
-
-      final symbol = await controller.addSymbol(
-        SymbolOptions(
-          geometry: LatLng(report.lat, report.lng),
-          iconImage: iconKey,
-          iconSize: _iconSizeForZoom(iconKey),
-          iconAnchor: 'bottom',
+    try {
+      await c.addSource(
+        'reports_src',
+        GeojsonSourceProperties(
+          data: {
+            'type': 'FeatureCollection',
+            'features': [],
+          },
+          cluster: true,
+          clusterRadius: 50,
         ),
       );
+    } catch (_) {}
+    try {
+      await c.addSymbolLayer(
+        'reports_src',
+        'reports_layer',
+        SymbolLayerProperties(
+          // Use per-feature icon with fallback to default
+          iconImage: ['coalesce', ['get', 'icon'], 'report_pin'],
+          iconSize: 1.0,
+          iconAllowOverlap: true,
+          iconIgnorePlacement: true,
+          // Rotate based on optional bearing property
+          iconRotate: ['to-number', ['get', 'bearing'], 0],
+          textAllowOverlap: true,
+          textIgnorePlacement: true,
+        ),
+      );
+    } catch (_) {}
 
-      _reportBySymbol[symbol] = report;
-    }
-
-    await _applyMarkerScaling();
-  }
-
-  Future<void> _syncSavedSpotMarkers(List<SavedSpot> spots) async {
-    final controller = _controller;
-
-    if (controller == null) return;
-
-    await _ensureMapImagesLoaded();
-
-    for (final symbol in _savedSpotBySymbol.keys.toList(growable: false)) {
-      await controller.removeSymbol(symbol);
-    }
-
-    _savedSpotBySymbol.clear();
-
-    _activeSavedSpotSymbol = null;
-
-    final filters = ref.read(mapFiltersProvider);
-
-    if (!filters.includeSavedSpots) return;
-
-    for (final spot in spots) {
-      final symbol = await controller.addSymbol(
-        SymbolOptions(
-          geometry: LatLng(spot.lat, spot.lng),
+    try {
+      await c.addSource(
+        'spots_src',
+        GeojsonSourceProperties(
+          data: {
+            'type': 'FeatureCollection',
+            'features': [],
+          },
+        ),
+      );
+    } catch (_) {}
+    try {
+      await c.addSymbolLayer(
+        'spots_src',
+        'spots_layer',
+        SymbolLayerProperties(
           iconImage: _savedSpotIconKey,
-          iconSize: _savedSpotIconSize(),
-          iconAnchor: 'bottom',
+          iconSize: 1.0,
+          iconAllowOverlap: true,
+          iconIgnorePlacement: true,
+          textAllowOverlap: true,
+          textIgnorePlacement: true,
         ),
       );
+    } catch (_) {}
+  }
 
-      _savedSpotBySymbol[symbol] = spot;
+  Map<String, dynamic> _featureCollection(Iterable<Map<String, dynamic>> features) {
+    return {
+      'type': 'FeatureCollection',
+      'features': features.toList(growable: false),
+    };
+  }
+
+  Map<String, dynamic> _pointFeature({
+    required String id,
+    required double lat,
+    required double lng,
+    Map<String, dynamic>? properties,
+  }) {
+    return {
+      'type': 'Feature',
+      'id': id,
+      'geometry': {
+        'type': 'Point',
+        'coordinates': [lng, lat],
+      },
+      'properties': properties ?? <String, dynamic>{},
+    };
+  }
+
+  double _haversineKm(double lat1, double lon1, double lat2, double lon2) {
+    const double earthRadiusKm = 6371.0;
+    final dLat = _deg2rad(lat2 - lat1);
+    final dLon = _deg2rad(lon2 - lon1);
+    final a =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(_deg2rad(lat1)) * math.cos(_deg2rad(lat2)) *
+            math.sin(dLon / 2) * math.sin(dLon / 2);
+    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+    return earthRadiusKm * c;
+  }
+
+  Future<void> _pushReports() async {
+    final c = _mapController;
+    if (c == null) return;
+    try {
+      final filters = ref.read(mapFiltersProvider);
+      final center = _userLocation ?? _initialCenter;
+      final activeCategoryIds = filters.categoryIds;
+      final radiusKm = filters.radiusKm;
+      final filtered = _incidentsById.values.where((feat) {
+        final props = feat['properties'] as Map<String, dynamic>? ?? {};
+        final coords = feat['geometry']['coordinates'] as List;
+        final lng = (coords[0] as num).toDouble();
+        final lat = (coords[1] as num).toDouble();
+        final withinRadius = _haversineKm(lat, lng, center.latitude, center.longitude) <= radiusKm;
+        final cid = (props['category_id'] as num?)?.toInt();
+        final matchesCategory = activeCategoryIds.isEmpty || (cid != null && activeCategoryIds.contains(cid));
+        return withinRadius && matchesCategory;
+      });
+      final fc = _featureCollection(filtered);
+      await c.setGeoJsonSource('reports_src', fc);
+    } catch (_) {}
+  }
+
+  Future<void> _pushFavoriteSpots() async {
+    final c = _mapController;
+    if (c == null) return;
+    try {
+      final filters = ref.read(mapFiltersProvider);
+      final center = _userLocation ?? _initialCenter;
+      final radiusKm = filters.radiusKm;
+      final filtered = _spotsById.values.where((feat) {
+        final coords = feat['geometry']['coordinates'] as List;
+        final lng = (coords[0] as num).toDouble();
+        final lat = (coords[1] as num).toDouble();
+        return _haversineKm(lat, lng, center.latitude, center.longitude) <= radiusKm;
+      });
+      final fc = _featureCollection(filtered);
+      await c.setGeoJsonSource('spots_src', fc);
+    } catch (_) {}
+  }
+
+  void _schedulePushReports() {
+    _incidentsDebounce?.cancel();
+    _incidentsDebounce = Timer(_pushDebounce, () {
+      _pushReports();
+    });
+  }
+
+  void _schedulePushFavoriteSpots() {
+    _spotsDebounce?.cancel();
+    _spotsDebounce = Timer(_pushDebounce, () {
+      _pushFavoriteSpots();
+    });
+  }
+
+  double _deg2rad(double deg) => deg * math.pi / 180.0;
+  double _rad2deg(double rad) => rad * 180.0 / math.pi;
+  double _bearingDegrees(double fromLat, double fromLng, double toLat, double toLng) {
+    final dLon = _deg2rad(toLng - fromLng);
+    final a = math.sin(dLon) * math.cos(_deg2rad(toLat));
+    final b = math.cos(_deg2rad(fromLat)) * math.sin(_deg2rad(toLat)) -
+        math.sin(_deg2rad(fromLat)) * math.cos(_deg2rad(toLat)) * math.cos(dLon);
+    var brng = math.atan2(a, b);
+    brng = _rad2deg(brng);
+    return (brng + 360) % 360;
+  }
+
+  Future<void> _initialLoadAndSubscribe() async {
+    final bounds = await _mapController?.getVisibleRegion();
+    final minLat = bounds?.southwest.latitude ?? (_userLocation?.latitude ?? _initialCenter.latitude);
+    final minLng = bounds?.southwest.longitude ?? (_userLocation?.longitude ?? _initialCenter.longitude);
+    final maxLat = bounds?.northeast.latitude ?? (_userLocation?.latitude ?? _initialCenter.latitude);
+    final maxLng = bounds?.northeast.longitude ?? (_userLocation?.longitude ?? _initialCenter.longitude);
+
+    try {
+      final initialReports = await supabase
+          .from('reports')
+          .select('*')
+          .gte('latitude', minLat)
+          .lte('latitude', maxLat)
+          .gte('longitude', minLng)
+          .lte('longitude', maxLng)
+          .filter('deleted_at', 'is', null);
+      for (final row in initialReports.whereType<Map<String, dynamic>>()) {
+        final id = (row['report_id'] ?? row['id']).toString();
+        final lat = (row['latitude'] as num).toDouble();
+        final lng = (row['longitude'] as num).toDouble();
+        await _ensureCategoryLookup();
+        final cid = (row['category_id'] as num?)?.toInt();
+        final slug = cid != null ? _reportCategorySlugLookup[cid] : null;
+        final iconKey = mapImageKeyForSlug(slug) ?? 'report_pin';
+        final props = {
+          'icon': iconKey,
+          'category_id': cid,
+          'created_at': row['created_at'],
+        };
+        _incidentsById[id] = _pointFeature(id: id, lat: lat, lng: lng, properties: props);
+      }
+      _schedulePushReports();
+
+      final initialSpots = await supabase
+          .from('favorite_spots')
+          .select('*')
+          .gte('latitude', minLat)
+          .lte('latitude', maxLat)
+          .gte('longitude', minLng)
+          .lte('longitude', maxLng);
+      for (final row in initialSpots.whereType<Map<String, dynamic>>()) {
+        final id = (row['favorite_spot_id'] ?? row['id']).toString();
+        final lat = (row['latitude'] as num).toDouble();
+        final lng = (row['longitude'] as num).toDouble();
+        final props = {
+          'user_id': row['user_id'],
+          'created_at': row['created_at'],
+        };
+        _spotsById[id] = _pointFeature(id: id, lat: lat, lng: lng, properties: props);
+      }
+      _schedulePushFavoriteSpots();
+    } catch (_) {}
+
+    final incCh = supabase.channel('public:reports')
+      ..onPostgresChanges(
+        event: sb.PostgresChangeEvent.insert,
+        schema: 'public',
+        table: 'reports',
+        callback: (payload) {
+          final r = payload.newRecord;
+          if (r == null) return;
+          final id = (r['report_id'] ?? r['id']).toString();
+          final lat = (r['latitude'] as num).toDouble();
+          final lng = (r['longitude'] as num).toDouble();
+          final cid = (r['category_id'] as num?)?.toInt();
+          final slug = cid != null ? _reportCategorySlugLookup[cid] : null;
+          final iconKey = mapImageKeyForSlug(slug) ?? 'report_pin';
+          final props = {
+            'icon': iconKey,
+            'category_id': cid,
+            'created_at': r['created_at'],
+          };
+          _incidentsById[id] = _pointFeature(id: id, lat: lat, lng: lng, properties: props);
+          _schedulePushReports();
+        },
+      )
+      ..onPostgresChanges(
+        event: sb.PostgresChangeEvent.update,
+        schema: 'public',
+        table: 'reports',
+        callback: (payload) {
+          final r = payload.newRecord;
+          if (r == null) return;
+          final id = (r['report_id'] ?? r['id']).toString();
+          final lat = (r['latitude'] as num).toDouble();
+          final lng = (r['longitude'] as num).toDouble();
+          final prev = _incidentsById[id];
+          final cid = (r['category_id'] as num?)?.toInt();
+          final slug = cid != null ? _reportCategorySlugLookup[cid] : null;
+          final iconKey = mapImageKeyForSlug(slug) ?? 'report_pin';
+          final props = {
+            'icon': iconKey,
+            'category_id': cid,
+            'created_at': r['created_at'],
+          };
+          double? bearing;
+          if (prev != null) {
+            final coords = prev['geometry']['coordinates'] as List;
+            final prevLng = (coords[0] as num).toDouble();
+            final prevLat = (coords[1] as num).toDouble();
+            bearing = _bearingDegrees(prevLat, prevLng, lat, lng);
+          }
+          final nextProps = {
+            ...?prev?['properties'] as Map<String, dynamic>?,
+            ...props,
+            if (bearing != null) 'bearing': bearing,
+          };
+          _incidentsById[id] = _pointFeature(id: id, lat: lat, lng: lng, properties: nextProps);
+          _schedulePushReports();
+        },
+      )
+      ..onPostgresChanges(
+        event: sb.PostgresChangeEvent.delete,
+        schema: 'public',
+        table: 'reports',
+        callback: (payload) {
+          final r = payload.oldRecord;
+          if (r == null) return;
+          final id = (r['report_id'] ?? r['id']).toString();
+          _incidentsById.remove(id);
+          _schedulePushReports();
+        },
+      );
+    await incCh.subscribe();
+    _channels.add(incCh);
+
+    final spotsCh = supabase.channel('public:favorite_spots')
+      ..onPostgresChanges(
+        event: sb.PostgresChangeEvent.insert,
+        schema: 'public',
+        table: 'favorite_spots',
+        callback: (payload) {
+          final r = payload.newRecord;
+          if (r == null) return;
+          final id = (r['favorite_spot_id'] ?? r['id']).toString();
+          final lat = (r['latitude'] as num).toDouble();
+          final lng = (r['longitude'] as num).toDouble();
+          final props = {
+            'user_id': r['user_id'],
+            'created_at': r['created_at'],
+          };
+          _spotsById[id] = _pointFeature(id: id, lat: lat, lng: lng, properties: props);
+          _schedulePushFavoriteSpots();
+        },
+      )
+      ..onPostgresChanges(
+        event: sb.PostgresChangeEvent.update,
+        schema: 'public',
+        table: 'favorite_spots',
+        callback: (payload) {
+          final r = payload.newRecord;
+          if (r == null) return;
+          final id = (r['favorite_spot_id'] ?? r['id']).toString();
+          final lat = (r['latitude'] as num).toDouble();
+          final lng = (r['longitude'] as num).toDouble();
+          final props = {
+            'user_id': r['user_id'],
+            'created_at': r['created_at'],
+          };
+          _spotsById[id] = _pointFeature(id: id, lat: lat, lng: lng, properties: props);
+          _schedulePushFavoriteSpots();
+        },
+      )
+      ..onPostgresChanges(
+        event: sb.PostgresChangeEvent.delete,
+        schema: 'public',
+        table: 'favorite_spots',
+        callback: (payload) {
+          final r = payload.oldRecord;
+          if (r == null) return;
+          final id = (r['favorite_spot_id'] ?? r['id']).toString();
+          _spotsById.remove(id);
+          _schedulePushFavoriteSpots();
+        },
+      );
+    await spotsCh.subscribe();
+    _channels.add(spotsCh);
+
+    _startTtlSweeper();
+  }
+
+  Timer? _ttlSweeper;
+  void _startTtlSweeper() {
+    _ttlSweeper?.cancel();
+    _ttlSweeper = Timer.periodic(const Duration(seconds: 45), (_) {
+      final now = DateTime.now().toUtc();
+      final toRemove = <String>[];
+      _incidentsById.forEach((id, feat) {
+        final props = feat['properties'] as Map<String, dynamic>;
+        // If deleted_at is present and before now, remove; otherwise respect TTL if provided
+        final deletedAt = props['deleted_at'];
+        if (deletedAt != null) {
+          try {
+            final dt = deletedAt is String ? DateTime.parse(deletedAt).toUtc() : (deletedAt as DateTime).toUtc();
+            if (dt.isBefore(now)) toRemove.add(id);
+          } catch (_) {}
+        } else {
+          final ttlMinutes = (props['ttl_minutes_override'] as num?)?.toInt();
+          final createdAt = props['created_at'];
+          if (ttlMinutes != null && createdAt != null) {
+            try {
+              final created = createdAt is String ? DateTime.parse(createdAt).toUtc() : (createdAt as DateTime).toUtc();
+              final ttlUntil = created.add(Duration(minutes: ttlMinutes));
+              if (ttlUntil.isBefore(now)) toRemove.add(id);
+            } catch (_) {}
+          }
+        }
+      });
+      for (final id in toRemove) {
+        _incidentsById.remove(id);
+      }
+      if (toRemove.isNotEmpty) _schedulePushReports();
+    });
+  }
+
+  @override
+  void dispose() {
+    _ttlSweeper?.cancel();
+    _incidentsDebounce?.cancel();
+    _spotsDebounce?.cancel();
+    for (final ch in _channels) {
+      try {
+        ch.unsubscribe();
+      } catch (_) {}
+    }
+    _channels.clear();
+    super.dispose();
+  }
+
+  /// Sync all markers to the map
+  Future<void> _syncAllMarkers() async {
+    if (_mapController == null) {
+      debugPrint('[MapPage] Cannot sync markers: controller is null');
+      return;
     }
 
-    await _applyMarkerScaling();
+    // Ensure all images are loaded before we try to render them
+    if (!_imagesLoaded) {
+      await _ensureMapImagesLoaded();
+    }
+    
+    // Also ensure we have category data to map icons correctly (non-blocking)
+    unawaited(_ensureCategoryLookup());
+
+    try {
+      debugPrint('[MapPage] Starting marker sync...');
+      
+      // Clear existing symbols first
+      await _mapController!.clearSymbols();
+      debugPrint('[MapPage] Cleared existing symbols');
+
+      // Get current markers
+      final markersAsync = ref.read(mapMarkersControllerProvider);
+      if (!markersAsync.hasValue) {
+        debugPrint('[MapPage] No markers data available');
+        return;
+      }
+
+      final markers = markersAsync.value ?? [];
+      debugPrint('[MapPage] Syncing ${markers.length} markers');
+
+      // Add markers to map
+      for (final marker in markers) {
+        await _addMarkerToMap(marker);
+      }
+
+      debugPrint('[MapPage] Marker sync completed successfully');
+    } catch (e, stack) {
+      debugPrint('[MapPage] Error syncing markers: $e');
+      debugPrint('[MapPage] Stack trace: $stack');
+    }
   }
 
-  double _iconSizeForZoom(String? iconKey) {
-    final zoom = _currentZoom;
+  /// Add a single marker to the map
+  Future<void> _addMarkerToMap(MapMarker marker) async {
 
-    final isDefault = iconKey == null || iconKey == 'marker-15';
+    try {
+      String iconImage;
+      double iconSize;
 
-    final base = isDefault ? 0.85 : 1.05;
+      if (marker.type == 'report') {
+        final report = marker.data as Report;
+        iconImage = _iconImageForReport(report);
+        iconSize = _iconSizeForZoom(_mapController!.cameraPosition?.zoom ?? 10.0);
+      } else if (marker.type == 'saved_spot') {
+        // Use the registered saved spot icon key
+        iconImage = _savedSpotIconKey;
+        iconSize = _savedSpotIconSize(_mapController!.cameraPosition?.zoom ?? 10.0);
+      } else {
+        debugPrint('[MapPage] Unknown marker type: ${marker.type}');
+        return;
+      }
 
-    if (zoom >= 17) return base * 1.4;
+      // Create symbol options
+      final symbolOptions = SymbolOptions(
+        geometry: LatLng(marker.lat, marker.lng),
+        iconImage: iconImage,
+        iconSize: iconSize,
+        iconAnchor: 'bottom',
+      );
 
-    if (zoom >= 15.5) return base * 1.2;
-
-    if (zoom >= 14) return base * 1.0;
-
-    if (zoom >= 12) return base * 0.85;
-
-    return base * 0.7;
+      // Add symbol to map
+      await _mapController!.addSymbol(symbolOptions);
+      debugPrint('[MapPage] Added ${marker.type} marker: ${marker.id}');
+      
+    } catch (e) {
+      debugPrint('[MapPage] Error adding marker ${marker.id}: $e');
+      
+      // Try with fallback icon
+      try {
+        final fallbackOptions = SymbolOptions(
+          geometry: LatLng(marker.lat, marker.lng),
+          iconImage: 'report_pin', // Default fallback
+          iconSize: 0.5,
+          iconAnchor: 'bottom',
+        );
+        await _mapController!.addSymbol(fallbackOptions);
+        debugPrint('[MapPage] Added fallback marker for: ${marker.id}');
+      } catch (fallbackError) {
+        debugPrint('[MapPage] Failed to add fallback marker: $fallbackError');
+      }
+    }
   }
 
-  double _savedSpotIconSize() {
-    final zoom = _currentZoom;
+  /// Get icon image name for a report
+  String _iconImageForReport(Report report) {
+    try {
+      // Prefer explicit slug if available, otherwise derive from category name
+      final keyFromSlug = mapImageKeyForSlug(report.categorySlug);
+      final keyFromName = keyFromSlug ?? mapImageKeyForCategoryName(report.categoryName);
 
-    if (zoom >= 17) return 1.0;
+      if (keyFromName != null) {
+        debugPrint('[MapPage] Using category icon key: $keyFromName');
+        return keyFromName;
+      }
 
-    if (zoom >= 15.5) return 0.9;
-
-    if (zoom >= 14) return 0.8;
-
-    if (zoom >= 12) return 0.7;
-
-    return 0.6;
+      // Fallback to default report icon
+      debugPrint('[MapPage] Using fallback icon for category: ${report.category}');
+      return 'report_pin';
+    } catch (e) {
+      debugPrint('[MapPage] Error getting icon for report: $e');
+      return 'report_pin';
+    }
   }
 
-  double _savedSpotSelectedIconSize() => _savedSpotIconSize() * 1.15;
+  double _iconSizeForZoom(double zoom) {
+    const base = 0.8;
+    if (zoom >= 17) return base * 1.2;
+    if (zoom >= 15.5) return base * 1.05;
+    if (zoom >= 14) return base * 0.9;
+    if (zoom >= 12) return base * 0.75;
+    return base * 0.6;
+  }
+
+  double _savedSpotIconSize(double zoom) {
+    if (zoom >= 17) return 0.95;
+    if (zoom >= 15.5) return 0.85;
+    if (zoom >= 14) return 0.75;
+    if (zoom >= 12) return 0.65;
+    return 0.5;
+  }
 
   Future<void> _applyMarkerScaling() async {
-    final controller = _controller;
-
-    if (controller == null) return;
+    final controller = _mapController;
+    if (controller == null || _symbolManager == null) return;
 
     if (_lastScaledZoom != null &&
         (_currentZoom - _lastScaledZoom!).abs() < 0.12) {
@@ -341,79 +775,71 @@ class _MapPageState extends ConsumerState<MapPage> {
 
     _lastScaledZoom = _currentZoom;
 
-    final futures = <Future<void>>[];
+    // For now, we'll re-sync all markers to apply new scaling
+    // In a full implementation, you'd track individual symbols and update them
+    await _syncAllMarkers();
+  }
 
-    _reportBySymbol.forEach((symbol, report) {
-      final iconKey = _iconImageForReport(report);
+  /// Handle symbol tap events
+  void _onSymbolTapped(Symbol symbol) async {
+    try {
+      final markersAsync = ref.read(mapMarkersControllerProvider);
+      if (!markersAsync.hasValue) return;
 
-      final size = _iconSizeForZoom(iconKey);
+      final markers = markersAsync.value ?? [];
 
-      futures.add(controller.updateSymbol(
-        symbol,
-        SymbolOptions(
-          iconImage: iconKey,
-          iconSize: size,
-        ),
-      ));
-    });
+      final geometry = symbol.options.geometry;
+      if (geometry == null) return;
 
-    _savedSpotBySymbol.forEach((symbol, _) {
-      final isActive = symbol == _activeSavedSpotSymbol;
+      final tappedLat = geometry.latitude;
+      final tappedLng = geometry.longitude;
 
-      final image = isActive ? _savedSpotSelectedIconKey : _savedSpotIconKey;
+      // Match markers by position (small tolerance for float precision)
+      const tolerance = 0.000001;
+      final match = markers.where((m) =>
+          (m.lat - tappedLat).abs() < tolerance &&
+          (m.lng - tappedLng).abs() < tolerance);
+      final matchingMarker = match.isNotEmpty ? match.first : null;
 
-      final size =
-          isActive ? _savedSpotSelectedIconSize() : _savedSpotIconSize();
+      if (matchingMarker == null) return;
 
-      futures.add(controller.updateSymbol(
-        symbol,
-        SymbolOptions(
-          iconImage: image,
-          iconSize: size,
-        ),
-      ));
-    });
-
-    if (futures.isNotEmpty) {
-      await Future.wait(futures);
+      if (matchingMarker.type == 'report') {
+        final report = matchingMarker.data as Report;
+        _openReportDetails(report);
+      } else if (matchingMarker.type == 'saved_spot') {
+        final savedSpot = matchingMarker.data as SavedSpot;
+        _selectedSavedSpotId = savedSpot.id;
+        await _highlightSavedSpot(savedSpot.id);
+      }
+    } catch (e) {
+      debugPrint('[MapPage] Error handling symbol tap: $e');
     }
   }
 
-  Future<void> _highlightSavedSpot(Symbol symbol) async {
-    final controller = _controller;
-
+  Future<void> _highlightSavedSpot(String savedSpotId) async {
+    final controller = _mapController;
     if (controller == null) return;
 
-    final normalSize = _savedSpotIconSize();
-
-    final selectedSize = _savedSpotSelectedIconSize();
-
-    if (_activeSavedSpotSymbol != null &&
-        _savedSpotBySymbol.containsKey(_activeSavedSpotSymbol)) {
-      await controller.updateSymbol(
-        _activeSavedSpotSymbol!,
-        SymbolOptions(
-          iconImage: _savedSpotIconKey,
-          iconSize: normalSize,
-          iconAnchor: 'bottom',
-        ),
-      );
+    try {
+      // For now, we'll just show a toast since we don't have direct symbol-to-marker mapping
+      // In a full implementation, you'd need to track symbols by their data
+      final savedSpots = ref.read(accountSavedSpotsProvider).value ?? [];
+      final match = savedSpots.where((spot) => spot.id == savedSpotId);
+      final SavedSpot? savedSpot = match.isNotEmpty ? match.first : null;
+      
+      if (savedSpot != null) {
+        showSuccessToast(
+          context,
+          '${savedSpot.name}\n${AppLocalizations.current.formatCoordinates(savedSpot.lat, savedSpot.lng)}',
+        );
+      }
+    } catch (e) {
+      debugPrint('[MapPage] Error highlighting saved spot: $e');
     }
-
-    await controller.updateSymbol(
-      symbol,
-      SymbolOptions(
-        iconImage: _savedSpotSelectedIconKey,
-        iconSize: selectedSize,
-        iconAnchor: 'bottom',
-      ),
-    );
-
-    _activeSavedSpotSymbol = symbol;
   }
 
   Future<void> _putUserMarker(LatLng at) async {
-    final controller = _controller;
+    final controller = _mapController;
 
     if (controller == null) return;
 
@@ -439,7 +865,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   /// Draw a true-meters circle as a polygon fill around the user location.
 
   Future<void> _drawSearchRadius([double? radiusKm]) async {
-    final controller = _controller;
+    final controller = _mapController;
 
     if (controller == null) return;
 
@@ -524,16 +950,6 @@ class _MapPageState extends ConsumerState<MapPage> {
     return ring;
   }
 
-  String _iconImageForReport(Report report) {
-    final slug =
-        report.categorySlug ?? _reportCategorySlugLookup[report.categoryId];
-
-    final iconKey = mapImageKeyForSlug(slug) ??
-        mapImageKeyForCategoryName(report.categoryName);
-
-    return iconKey ?? 'marker-15';
-  }
-
   // -------------------- Bottom sheets --------------------
 
   void _openReportDetails(Report report) {
@@ -564,7 +980,7 @@ class _MapPageState extends ConsumerState<MapPage> {
 
     final filters = ref.watch(mapFiltersProvider);
 
-    final reportsAsync = ref.watch(mapReportsControllerProvider);
+    final reportsAsync = ref.watch(mapReportsStreamProvider); // Use stream provider
 
     final permissionAsync = ref.watch(locationPermissionProvider);
 
@@ -584,15 +1000,63 @@ class _MapPageState extends ConsumerState<MapPage> {
 
     final missingKey = mapStyleUrl.contains('YOUR_KEY_HERE');
 
-    final errorText = reportsAsync.maybeWhen(
+    final String? errorText = reportsAsync.maybeWhen<String?>(
       error: (error, _) => error.toString(),
       orElse: () => null,
     );
 
-    final activeCount = reportsAsync.maybeWhen(
+    final int? activeCount = reportsAsync.maybeWhen<int?>(
       data: (value) => value.length,
       orElse: () => null,
     );
+
+    // Build markers from reports and saved spots
+    final reports = reportsAsync.value ?? [];
+    debugPrint('[MapPage] build() reports count: \\${reports.length}');
+    for (final r in reports) {
+      debugPrint('[MapPage] build() Report: id=\\${r.id}, lat=\\${r.lat}, lng=\\${r.lng}');
+    }
+    final savedSpots = ref.watch(accountSavedSpotsProvider).value ?? [];
+    final markers = [
+      ...reports.map((r) => MapMarker(
+        id: r.id,
+        lat: r.lat,
+        lng: r.lng,
+        type: 'report',
+        data: r,
+      )),
+      ...savedSpots.map((s) => MapMarker(
+        id: s.id,
+        lat: s.lat,
+        lng: s.lng,
+        type: 'saved_spot',
+        data: s,
+      )),
+    ];
+    debugPrint('[MapPage] build() markers count: \\${markers.length}');
+
+    // Debug: show marker coordinates in the UI
+    Widget markerDebugWidget = const SizedBox.shrink();
+    if (markers.isNotEmpty) {
+      final coords = markers
+          .map((m) => '(${m.lat.toStringAsFixed(5)}, ${m.lng.toStringAsFixed(5)})')
+          .join('\n');
+      markerDebugWidget = Positioned(
+        right: 10,
+        bottom: 10,
+        child: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.7),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            'Markers:\n$coords',
+            style: const TextStyle(color: Colors.white, fontSize: 12),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       body: Stack(
@@ -614,73 +1078,70 @@ class _MapPageState extends ConsumerState<MapPage> {
               compassEnabled: true,
               trackCameraPosition: true,
               onCameraIdle: () async {
-                final position = _controller?.cameraPosition;
+                final position = _mapController?.cameraPosition;
                 if (position != null) {
                   _currentZoom = position.zoom;
                 }
                 await _applyMarkerScaling();
               },
               onStyleLoadedCallback: () async {
-                _mapImagesLoaded = false;
-
+                _imagesLoaded = false;
                 await _ensureMapImagesLoaded();
-
                 await _drawSearchRadius();
-
-                final reports =
-                    await ref.read(mapReportsControllerProvider.future);
-
-                await _syncReportMarkers(reports);
-
-                final spots = await ref.read(accountSavedSpotsProvider.future);
-
-                await _syncSavedSpotMarkers(spots);
+                if (_useLiveGeoJson) {
+                  await _ensureLiveSourcesAndLayers();
+                  await _initialLoadAndSubscribe();
+                } else {
+                  await _syncAllMarkers();
+                }
+              },
+              onMapClick: (point, latLng) async {
+                try {
+                  final rendered = await _mapController?.queryRenderedFeatures(
+                    math.Point<double>(point.x, point.y),
+                    ['reports_layer', 'spots_layer'],
+                    const [],
+                  );
+                  if (rendered == null || rendered.isEmpty) return;
+                  final props = rendered.first.properties ?? <String, dynamic>{};
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(props.toString())));
+                } catch (e) {
+                  debugPrint('queryRenderedFeatures error: $e');
+                }
               },
               onMapCreated: (controller) async {
-                _controller = controller;
+                _mapController = controller;
 
-                _mapImagesLoaded = false;
-
+                _imagesLoaded = false;
                 await _ensureMapImagesLoaded();
 
                 final symbolManager = controller.symbolManager;
-
                 if (symbolManager != null) {
                   await symbolManager.setIconAllowOverlap(true);
-
                   await symbolManager.setIconIgnorePlacement(true);
-
                   await symbolManager.setTextAllowOverlap(true);
-
                   await symbolManager.setTextIgnorePlacement(true);
                 }
 
                 controller.onSymbolTapped.add((symbol) {
-                  if (_reportBySymbol.containsKey(symbol)) {
-                    _openReportDetails(_reportBySymbol[symbol]!);
-
-                    return;
-                  }
-
-                  final spot = _savedSpotBySymbol[symbol];
-
-                  if (spot != null) {
-                    unawaited(_highlightSavedSpot(symbol));
-
-                    showSuccessToast(
-                      context,
-                      '${spot.name}\n${AppLocalizations.current.formatCoordinates(spot.lat, spot.lng)}',
-                    );
-                  }
+                  _onSymbolTapped(symbol);
                 });
 
-                final loc = await ref.read(currentLocationProvider.future);
+                // Immediately load and display markers
+                final markersAsync = ref.read(mapMarkersControllerProvider);
+                if (markersAsync.hasValue) {
+                  final markersToShow = markersAsync.value ?? [];
+                  debugPrint('[MapPage] Displaying markers on map creation: ${markersToShow.length}');
+                  await _syncAllMarkers();
+                  _markersInitialized = true;
+                } else {
+                  await _syncAllMarkers();
+                }
 
+                final loc = await ref.read(currentLocationProvider.future);
                 if (loc != null) {
                   final where = LatLng(loc.latitude!, loc.longitude!);
-
                   _userLocation = where;
-
                   _initialCenter = where;
 
                   await controller.animateCamera(
@@ -690,27 +1151,21 @@ class _MapPageState extends ConsumerState<MapPage> {
                   );
 
                   await _putUserMarker(where);
-
                   await _drawSearchRadius();
                 }
-
-                final reports =
-                    await ref.read(mapReportsControllerProvider.future);
-
-                await _syncReportMarkers(reports);
-
-                final savedSpots =
-                    await ref.read(accountSavedSpotsProvider.future);
-
-                await _syncSavedSpotMarkers(savedSpots);
               },
             ),
           ),
+
+          // Debug widget for marker coordinates (sibling in the Stack)
+          if (markers.isNotEmpty) markerDebugWidget,
+
           if (missingKey)
             const Align(
               alignment: Alignment.center,
               child: _MissingKeyNotice(),
             ),
+
           Positioned(
             top: topInset,
             left: canNavigateBack ? 72 : 16,
@@ -722,6 +1177,7 @@ class _MapPageState extends ConsumerState<MapPage> {
               activeCount: activeCount,
             ),
           ),
+
           if (canNavigateBack)
             Positioned(
               top: topInset,
@@ -735,6 +1191,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                 ),
               ),
             ),
+
           Positioned(
             right: 24,
             top: topInset,
@@ -768,6 +1225,7 @@ class _MapPageState extends ConsumerState<MapPage> {
               ),
             ),
           ),
+
           Positioned(
             left: 16,
             bottom: bottomInset,
@@ -792,6 +1250,7 @@ class _MapPageState extends ConsumerState<MapPage> {
               ),
             ),
           ),
+
           if (errorText != null)
             Positioned(
               left: 16,

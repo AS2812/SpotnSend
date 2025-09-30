@@ -21,13 +21,11 @@ class MapListSheet extends ConsumerWidget {
     final contentAsync = ref.watch(mapListContentProvider);
 
     Future<void> refresh() async {
-      ref.invalidate(mapReportsControllerProvider);
+      ref.invalidate(mapMarkersControllerProvider);
       ref.invalidate(accountSavedSpotsProvider);
-      ref.invalidate(mapAlertsControllerProvider);
       await Future.wait([
-        ref.read(mapReportsControllerProvider.future),
+        ref.read(mapMarkersControllerProvider.future),
         ref.read(accountSavedSpotsProvider.future),
-        ref.read(mapAlertsControllerProvider.future),
       ]);
     }
 
