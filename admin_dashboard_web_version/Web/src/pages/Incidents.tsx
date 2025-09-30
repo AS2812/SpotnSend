@@ -12,8 +12,8 @@ type Row = {
   id: string;
   title: string;
   area: string;
-  severity: "low" | "normal" | "high" | "critical";
-  status: "open" | "assigned" | "resolved";
+  severity: "low" | "normal";
+  status: "submitted" | "assigned" | "resolved";
   reportedDate: string;
   reporter?: string;
   reporterId?: string;  // 14-digit national ID
@@ -158,8 +158,8 @@ export default function IncidentPage(){
 
   // filters
   const [q, setQ] = useState("");
-  const [fStatus, setFStatus] = useState<"all"|"open"|"assigned"|"resolved">("all");
-  const [fSeverity, setFSeverity] = useState<"all"|"low"|"normal"|"high"|"critical">("all");
+  const [fStatus, setFStatus] = useState<"all"|"submitted"|"assigned"|"resolved">("all");
+  const [fSeverity, setFSeverity] = useState<"all"|"low"|"normal">("all");
   const [dateRange, setDateRange] = useState<DatePreset>("all");
 
   const allLabel    = lang === "ar" ? "الكل" : "All";
@@ -184,12 +184,10 @@ export default function IncidentPage(){
 
   const sevText = (s:Row["severity"]) =>
     s==="low" ? (lang==="ar"?"منخفضة":"Low") :
-    s==="medium" ? (lang==="ar"?"متوسطة":"Medium") :
-    s==="high" ? (lang==="ar"?"عالية":"High") :
-    (lang==="ar"?"حرجة":"Critical");
+    (lang==="ar"?"عادية":"Normal");
 
   const stText = (s:Row["status"]) =>
-    s==="open" ? (lang==="ar"?"مفتوحة":"Open") :
+    s==="submitted" ? (lang==="ar"?"مُرسلة":"Submitted") :
     s==="assigned" ? (lang==="ar"?"قيد المعالجة":"Assigned") :
     (lang==="ar"?"مغلقة":"Resolved");
 
@@ -220,16 +218,14 @@ export default function IncidentPage(){
 
   const statusOpts: Opt[] = [
     { value:"all",      label: allLabel },
-    { value:"open",     label: tFallback(t, lang, "incident.status.open",     "Open", "مفتوحة") },
+    { value:"submitted",label: tFallback(t, lang, "incident.status.submitted", "Submitted", "مُرسلة") },
     { value:"assigned", label: tFallback(t, lang, "incident.status.assigned", "Assigned", "قيد المعالجة") },
     { value:"resolved", label: tFallback(t, lang, "incident.status.resolved", "Resolved", "مغلقة") },
   ];
   const severityOpts: Opt[] = [
     { value:"all",     label: allLabel },
     { value:"low",     label: tFallback(t, lang, "incident.severity.low",     "Low", "منخفضة") },
-    { value:"medium",  label: tFallback(t, lang, "incident.severity.medium",  "Medium", "متوسطة") },
-    { value:"high",    label: tFallback(t, lang, "incident.severity.high",    "High", "عالية") },
-    { value:"critical",label: tFallback(t, lang, "incident.severity.critical","Critical", "حرجة") },
+    { value:"normal",  label: tFallback(t, lang, "incident.severity.normal",  "Normal", "عادية") },
   ];
   const rangeOpts: Opt[] = [
     { value:"all", label: allLabel },
@@ -308,10 +304,8 @@ export default function IncidentPage(){
     if (!isAdmin) { console.warn("save blocked: non-admin"); return; }
     if (!selected || !draft) return;
     const idNum = numericId(selected.id);
-    // Map severity -> priority for API
-    const sevToPrio = (s: Row["severity"]) => (
-      s === "critical" ? "critical" : s === "high" ? "high" : s === "medium" ? "medium" : "low"
-    );
+    // Map severity -> priority for API (only low/normal)
+    const sevToPrio = (s: Row["severity"]) => (s === "normal" ? "normal" : "low");
     try {
       // Status/priority via server API
       if (draft.status || draft.severity) {
@@ -443,15 +437,13 @@ export default function IncidentPage(){
                   <span className="label">{lang==="ar"?"الخطورة":"Severity"}</span>
                   <select value={(draft?.severity as Row["severity"]) ?? "low"} onChange={e=>setDraft({ ...(draft||{}), severity: e.target.value as Row["severity"] })}>
                     <option value="low">{lang==="ar"?"منخفضة":"Low"}</option>
-                    <option value="medium">{lang==="ar"?"متوسطة":"Medium"}</option>
-                    <option value="high">{lang==="ar"?"عالية":"High"}</option>
-                    <option value="critical">{lang==="ar"?"حرجة":"Critical"}</option>
+                    <option value="normal">{lang==="ar"?"عادية":"Normal"}</option>
                   </select>
                 </div>
                 <div className="users-field">
                   <span className="label">{lang==="ar"?"الحالة":"Status"}</span>
-                  <select value={(draft?.status as Row["status"]) ?? "open"} onChange={e=>setDraft({ ...(draft||{}), status: e.target.value as Row["status"] })}>
-                    <option value="open">{lang==="ar"?"مفتوحة":"Open"}</option>
+                  <select value={(draft?.status as Row["status"]) ?? "submitted"} onChange={e=>setDraft({ ...(draft||{}), status: e.target.value as Row["status"] })}>
+                    <option value="submitted">{lang==="ar"?"مُرسلة":"Submitted"}</option>
                     <option value="assigned">{lang==="ar"?"قيد المعالجة":"Assigned"}</option>
                     <option value="resolved">{lang==="ar"?"مغلقة":"Resolved"}</option>
                   </select>
@@ -501,7 +493,7 @@ export default function IncidentPage(){
 
             <div className="users-modal__footer">
               <div className="left" style={{ display:"flex", gap:8 }}>
-                {mode === "view" && selected.status === "open" && (
+                {mode === "view" && selected.status === "submitted" && (
                   <button className="btn btn--primary" onClick={assignIncident}>
                     {lang==="ar"?"إسناد":"Assign"}
                   </button>

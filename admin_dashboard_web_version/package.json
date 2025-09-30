@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "spotnsend-admin",
   "private": true,
   "version": "0.0.0",
@@ -13,6 +13,8 @@
     "cy:open": "cross-env VITE_BYPASS_AUTH=1 cypress open"
   },
   "dependencies": {
+    "@maptiler/client": "^2.5.1",
+    "@maptiler/sdk": "^3.8.0",
     "@sentry/browser": "^8.55.0",
     "@sentry/node": "^8.55.0",
     "@sentry/react": "^8.55.0",

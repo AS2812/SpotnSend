@@ -101,11 +101,10 @@ export type CreateUserPayload = {
   role: "admin" | "user";
   email?: string;
   nationalIdNumber?: string; // id_number
-  notificationRadiusKm?: number;
 };
 
 export type UpdateUserPatch = Partial<CreateUserPayload> & {
-  account_status?: "active" | "pending" | "suspended";
+  account_status?: "verified" | "pending" | "banned";
 };
 
 // Server-backed status changes
@@ -113,7 +112,7 @@ export async function suspendUser(userId: number) {
   if (!supabase) throw new Error("Supabase client not configured");
   const { error } = await supabase
     .from("users")
-    .update({ account_status: "suspended", updated_at: new Date().toISOString() })
+    .update({ account_status: "banned", updated_at: new Date().toISOString() })
     .eq("user_id", userId);
   if (error) throw new Error(error.message);
   return { ok: true };
@@ -123,7 +122,7 @@ export async function activateUser(userId: number) {
   if (!supabase) throw new Error("Supabase client not configured");
   const { error } = await supabase
     .from("users")
-    .update({ account_status: "active", updated_at: new Date().toISOString() })
+    .update({ account_status: "verified", updated_at: new Date().toISOString() })
     .eq("user_id", userId);
   if (error) throw new Error(error.message);
   return { ok: true };
@@ -138,7 +137,6 @@ export async function createUser(payload: CreateUserPayload) {
     email: payload.email || null,
     id_number: payload.nationalIdNumber || null,
     account_status: "pending",
-    notification_radius_km: payload.notificationRadiusKm ?? null,
   };
   const { data, error } = await supabase.from("users").insert([insert]).select("user_id, full_name, role, account_status, email").maybeSingle();
   if (error) throw new Error(error.message);
@@ -152,7 +150,6 @@ export async function updateUser(userId: number, patch: UpdateUserPatch) {
     role: patch.role,
     email: patch.email,
     id_number: patch.nationalIdNumber,
-    notification_radius_km: patch.notificationRadiusKm,
   };
   if (patch.account_status) updates.account_status = patch.account_status;
   // Remove undefined keys

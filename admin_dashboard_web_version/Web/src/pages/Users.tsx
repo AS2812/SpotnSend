@@ -25,7 +25,6 @@ type UserRow = {
   phone?: string;               // 11 digits
   email?: string;               // new
   reportsSubmitted?: number | null; // new (null/undefined => show “—”)
-  notificationRadiusKm?: number;
   favoriteSpotsCount?: number;
 
   // NEW: optional avatar
@@ -205,7 +204,7 @@ export default function UsersPage(){
   // Add-user dialog
   const [addOpen, setAddOpen] = useState(false);
   const [addDraft, setAddDraft] = useState<Partial<UserRow>>({
-    name:"", role:"user", gender:"other", phone:"", email:"", nationalIdNumber:"", notificationRadiusKm:0, favoriteSpotsCount:0
+    name:"", role:"user", gender:"other", phone:"", email:"", nationalIdNumber:"", favoriteSpotsCount:0
   });
 
   const allLabel     = lang === "ar" ? "الكل" : "All";
@@ -291,7 +290,7 @@ export default function UsersPage(){
       const userId = Number(current.id);
       const willUnban = current.status === "banned";
       if (willUnban) {
-        await activateUser(userId);
+        await apiUpdateUser(userId, { account_status: "pending" });
         setRow(current.id, { status: "pending", active: "yes" });
       } else {
         await suspendUser(userId);
@@ -313,7 +312,6 @@ export default function UsersPage(){
       gender: current.gender,
       phone: current.phone,
       email: current.email ?? "",
-      notificationRadiusKm: current.notificationRadiusKm
       // reportsSubmitted intentionally NOT editable anymore
     });
     setMode("edit");
@@ -330,7 +328,6 @@ export default function UsersPage(){
         role: (draft.role as any) || current.role,
         email: draft.email ?? current.email,
         nationalIdNumber: draft.nationalIdNumber ?? current.nationalIdNumber,
-        notificationRadiusKm: draft.notificationRadiusKm ?? current.notificationRadiusKm,
       });
       setRow(current.id, draft);
       setMode("view");
@@ -366,7 +363,7 @@ export default function UsersPage(){
   // Add user
   const openAdd = () => {
     if (!isAdmin) { console.warn("add blocked: non-admin"); return; }
-    setAddDraft({ name:"", role:"user", gender:"other", phone:"", email:"", nationalIdNumber:"", notificationRadiusKm:0, favoriteSpotsCount:0 });
+    setAddDraft({ name:"", role:"user", gender:"other", phone:"", email:"", nationalIdNumber:"", favoriteSpotsCount:0 });
     setAddOpen(true);
   };
   const createUser = async () => {
@@ -381,21 +378,20 @@ export default function UsersPage(){
         role: (d.role as Role) || "user",
         email: d.email || undefined,
         nationalIdNumber: d.nationalIdNumber,
-        notificationRadiusKm: d.notificationRadiusKm ?? undefined,
       });
       const status = String(created?.account_status || "pending").toLowerCase();
+      const newStatus: Status = status === "verified" ? "verified" : status === "banned" ? "banned" : "pending";
       const newRow: UserRow = {
         id: String(created?.user_id ?? d.nationalIdNumber),
         name: d.name!,
         role: ((created?.role || d.role) as Role) || "user",
-        status: status === "active" ? "verified" : status === "suspended" ? "banned" : "pending",
-        active: status === "active" ? "yes" : "no",
+        status: newStatus,
+        active: newStatus === "verified" ? "yes" : "no",
         nationalIdNumber: d.nationalIdNumber,
         gender: (d.gender as any) || "other",
         phone: d.phone || "",
         email: d.email || "",
         reportsSubmitted: null,
-        notificationRadiusKm: d.notificationRadiusKm ?? 0,
         favoriteSpotsCount: d.favoriteSpotsCount ?? 0,
       };
       setRows(prev => [newRow, ...prev]);
@@ -431,7 +427,6 @@ export default function UsersPage(){
     fPhone: t("users.details.phone"),
     fEmail: t("users.details.email") || (lang==="ar" ? "البريد الإلكتروني" : "Email"),
     fReports: t("users.details.reports") || (lang==="ar" ? "عدد البلاغات" : "Reports Submitted"),
-    fRadius: t("users.details.radius"),
     fFavs: t("users.details.favourites"),
     addNew: t("users.actions.addNew") || (lang==="ar" ? "إضافة جديد" : "Add New"),
     roleLabel: t("users.filters.role"),
@@ -531,7 +526,6 @@ export default function UsersPage(){
                 <Field label={txt.fPhone}  value={current.phone || "—"}/>
                 <Field label={txt.fEmail}  value={current.email || "—"}/>
                 <Field label={txt.fReports} value={current.reportsSubmitted != null ? String(current.reportsSubmitted) : "—"}/>
-                <Field label={txt.fRadius} value={current.notificationRadiusKm != null ? String(current.notificationRadiusKm) : "—"}/>
                 <Field label={txt.fFavs}   value={current.favoriteSpotsCount != null ? String(current.favoriteSpotsCount) : "0"}/>
                 <div className="users-field" style={{ gridColumn: "1 / -1" }}>
                   <span className="label">{txt.fNatImgs}</span>
@@ -551,7 +545,7 @@ export default function UsersPage(){
                 setDraft={setDraft}
                 labels={{
                   name:txt.fName, gender:txt.fGender, phone:txt.fPhone, email:txt.fEmail,
-                  radius:txt.fRadius, role:txt.roleLabel, roleAdmin:txt.roleAdmin, roleUser:txt.roleUser
+                  role:txt.roleLabel, roleAdmin:txt.roleAdmin, roleUser:txt.roleUser
                   // reports removed from edit labels
                 }}
               />
@@ -664,16 +658,7 @@ export default function UsersPage(){
                 />
               </FormRow>
 
-              <FormRow label={txt.fRadius}>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min={0}
-                  step="0.5"
-                  value={addDraft.notificationRadiusKm ?? 0}
-                  onChange={(e)=>setAddDraft({ ...addDraft, notificationRadiusKm: Number(e.target.value || 0) })}
-                />
-              </FormRow>
+              {/* Radius field removed */}
             </div>
 
             <div className="users-modal__footer">
